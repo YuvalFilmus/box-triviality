@@ -1,5 +1,7 @@
 # Box-triviality in Lean
 
+[![Lean build](https://github.com/YuvalFilmus/box-triviality/actions/workflows/lean.yml/badge.svg)](https://github.com/YuvalFilmus/box-triviality/actions/workflows/lean.yml)
+
 A Lean 4 formalization of the results in *Triviality of promise
 polymorphisms*.
 
