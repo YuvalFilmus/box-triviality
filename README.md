@@ -28,8 +28,9 @@ Theorem 1.4.
 
 [`BoxTriviality/ReductionToBinary.lean`](BoxTriviality/ReductionToBinary.lean)
 formalizes Theorem 1.3. Its main result is
-`boxTrivialAtAllArities_iff_binary`. The proof works for arbitrary coordinate
-types and arbitrary, possibly infinite, alphabets.
+`boxTrivialAtAllArities_iff_binary`. The same file formalizes Corollary 3.3
+as `certificateTrivialAtAllArities_iff_binary`. Both proofs work for arbitrary
+coordinate types and arbitrary, possibly infinite, alphabets.
 
 ## Building
 

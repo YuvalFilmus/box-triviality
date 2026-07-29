@@ -58,6 +58,22 @@ structure Compression {α : Type uA} {β : Type uB} {n : Nat}
     ∀ c, (∀ a, toFun a = c) → ∀ x, h x = c
 
 /--
+A binary compression used in the certificate version of the theorem.
+
+It stays inside the image of `h`, transfers constant values back to `h`, and
+cannot depend on only one input when `h` is nonconstant.
+-/
+structure BinaryCompression {α : Type uA} {β : Type uB} {n : Nat}
+    (h : (Fin n → α) → β) where
+  toFun : (Fin 2 → α) → β
+  image_le : ∀ x, ∃ y, h y = toFun x
+  eq_const_of_toFun_eq_const :
+    ∀ c, (∀ x, toFun x = c) → ∀ y, h y = c
+  not_eq_eval_of_nonconstant :
+    (∃ u v, h u ≠ h v) →
+      ∀ (s : Fin 2) (ψ : α → β), ¬ (∀ x, toFun x = ψ (x s))
+
+/--
 Every function on a positive power of a type with at least two elements has
 a compression based at any prescribed input.
 -/
@@ -117,6 +133,89 @@ lemma exists_compression {α : Type uA} {β : Type uB} {n : Nat}
         have hne : a₁ ≠ a₀ := fun h ↦ ha h.symm
         simpa [g, hne] using hc a₁
       exact False.elim (hother (h₁.trans h₀.symm))
+
+/-- Construct the binary compression used for certificate-triviality. -/
+lemma exists_binaryCompression {α : Type uA} {β : Type uB} {n : Nat}
+    (hα : HasAtLeastTwo α) (h : (Fin n → α) → β) :
+    Nonempty (BinaryCompression h) := by
+  classical
+  rcases hα with ⟨a₀, a₁, ha⟩
+  by_cases hnonconstant : ∃ u v, h u ≠ h v
+  · rcases hnonconstant with ⟨u, v, huv⟩
+    let g : (Fin 2 → α) → β :=
+      fun x ↦ if x 0 = x 1 then h u else h v
+    refine ⟨{
+      toFun := g
+      image_le := ?_
+      eq_const_of_toFun_eq_const := ?_
+      not_eq_eval_of_nonconstant := ?_
+    }⟩
+    · intro x
+      by_cases hx : x 0 = x 1
+      · exact ⟨u, by simp [g, hx]⟩
+      · exact ⟨v, by simp [g, hx]⟩
+    · intro c hc
+      let diagonal : Fin 2 → α := fun _ ↦ a₀
+      let offDiagonal : Fin 2 → α := Fin.cases a₀ (fun _ ↦ a₁)
+      have hdiag : g diagonal = h u := by simp [g, diagonal]
+      have hoff : g offDiagonal = h v := by
+        have hne : offDiagonal 0 ≠ offDiagonal 1 := by
+          change a₀ ≠ a₁
+          exact ha
+        simp [g, hne]
+      exact False.elim (huv
+        (hdiag.symm.trans ((hc diagonal).trans
+          ((hc offDiagonal).symm.trans hoff))))
+    · intro _ s ψ heval
+      have hs : s = 0 ∨ s = 1 := by
+        refine Fin.cases (Or.inl rfl) (fun q ↦ ?_) s
+        have hq : q = 0 := Fin.eq_zero q
+        subst q
+        exact Or.inr rfl
+      rcases hs with hs | hs
+      · subst s
+        let diagonal : Fin 2 → α := fun _ ↦ a₀
+        let offDiagonal : Fin 2 → α := Fin.cases a₀ (fun _ ↦ a₁)
+        have heq : g diagonal = g offDiagonal := by
+          rw [heval diagonal, heval offDiagonal]
+          change ψ a₀ = ψ a₀
+          rfl
+        have hdiag : g diagonal = h u := by simp [g, diagonal]
+        have hoff : g offDiagonal = h v := by
+          have hne : offDiagonal 0 ≠ offDiagonal 1 := by
+            change a₀ ≠ a₁
+            exact ha
+          simp [g, hne]
+        exact huv (hdiag.symm.trans (heq.trans hoff))
+      · subst s
+        let diagonal : Fin 2 → α := fun _ ↦ a₀
+        let offDiagonal : Fin 2 → α := Fin.cases a₁ (fun _ ↦ a₀)
+        have heq : g diagonal = g offDiagonal := by
+          rw [heval diagonal, heval offDiagonal]
+          change ψ a₀ = ψ a₀
+          rfl
+        have hdiag : g diagonal = h u := by simp [g, diagonal]
+        have hoff : g offDiagonal = h v := by
+          have hne : offDiagonal 0 ≠ offDiagonal 1 := by
+            change a₁ ≠ a₀
+            exact fun h ↦ ha h.symm
+          simp [g, hne]
+        exact huv (hdiag.symm.trans (heq.trans hoff))
+  · let seed : Fin n → α := fun _ ↦ a₀
+    have hconstant : ∀ x, h x = h seed := by
+      intro x
+      by_contra hx
+      exact hnonconstant ⟨x, seed, hx⟩
+    refine ⟨{
+      toFun := fun _ ↦ h seed
+      image_le := fun _ ↦ ⟨seed, rfl⟩
+      eq_const_of_toFun_eq_const := ?_
+      not_eq_eval_of_nonconstant := ?_
+    }⟩
+    · intro c hc x
+      exact (hconstant x).trans (hc (fun _ ↦ a₀))
+    · intro hfalse
+      exact False.elim (hnonconstant hfalse)
 
 /-- Fix the first row of an `(n+1)`-ary operation. -/
 def fixFirst {n : Nat} (f : Operation (n + 1) A B) (a : Tuple A) :
@@ -683,5 +782,106 @@ theorem boxTrivialAtAllArities_iff_binary
                 simpa [Nat.succ_eq_add_one] using
                   boxTrivial_succ (n := Nat.succ k) (Nat.zero_lt_succ k)
                     hA hP hbinary hprevious
+
+/-- Certificate type implies box type. -/
+lemma isBox_of_isCertificate {n : Nat} {f : Operation n A B}
+    (hcert : IsCertificate Q f) : IsBox Q f := by
+  rcases hcert with ⟨I, δ, hconstant, hforce⟩
+  intro y hy
+  apply hforce y
+  intro i hi
+  rcases hy i with ⟨x, hx⟩
+  exact hx.symm.trans (hconstant i hi x)
+
+/--
+Corollary 3.3: certificate-triviality in all positive arities is equivalent
+to certificate-triviality in arity two.
+-/
+theorem certificateTrivialAtAllArities_iff_binary
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hP : HasFullProjections P) :
+    CertificateTrivialAtAllArities P Q Φ ↔
+      CertificateTrivialAtArity P Q Φ 2 := by
+  classical
+  constructor
+  · intro hall
+    exact hall 2 (Nat.succ_le_succ (Nat.zero_le 1))
+  · intro hcertificateBinary
+    have hboxBinary : BoxTrivialAtArity P Q Φ 2 := by
+      intro f hf
+      rcases hcertificateBinary f hf with hdict | hcert
+      · exact Or.inl hdict
+      · exact Or.inr (isBox_of_isCertificate hcert)
+    have hboxAll : BoxTrivialAtAllArities P Q Φ :=
+      (boxTrivialAtAllArities_iff_binary hA hP).2 hboxBinary
+    intro n hn f hf
+    rcases hboxAll n hn f hf with hdict | hbox
+    · exact Or.inl hdict
+    · by_cases hallconstant :
+          ∀ i, ∃ c, ∀ x : Fin n → A i, f i x = c
+      · let value : ∀ i, B i :=
+          fun i ↦ Classical.choose (hallconstant i)
+        have hvalue :
+            ∀ i x, f i x = value i :=
+          fun i ↦ Classical.choose_spec (hallconstant i)
+        let I : Set ι := fun _ ↦ True
+        let δ : ∀ i, i ∈ I → B i := fun i _ ↦ value i
+        exact Or.inr ⟨I, δ, by
+          constructor
+          · intro i hi x
+            exact hvalue i x
+          · intro y hy
+            apply hbox
+            intro i
+            let a : A i := Classical.choose (hA i)
+            let x : Fin n → A i := fun _ ↦ a
+            refine ⟨x, ?_⟩
+            calc
+              f i x = value i := hvalue i x
+              _ = δ i True.intro := rfl
+              _ = y i := (hy i True.intro).symm⟩
+      · have hsomeNonconstant :
+            ∃ i, ¬ ∃ c, ∀ x : Fin n → A i, f i x = c := by
+          by_contra hnone
+          apply hallconstant
+          intro i
+          by_contra hi
+          exact hnone ⟨i, hi⟩
+        rcases hsomeNonconstant with ⟨i₀, hi₀⟩
+        have hfi₀ :
+            ∃ u v : Fin n → A i₀, f i₀ u ≠ f i₀ v := by
+          by_contra hnone
+          apply hi₀
+          let a : A i₀ := Classical.choose (hA i₀)
+          let seed : Fin n → A i₀ := fun _ ↦ a
+          refine ⟨f i₀ seed, ?_⟩
+          intro x
+          by_contra hx
+          exact hnone ⟨x, seed, hx⟩
+        let compression : ∀ i, BinaryCompression (f i) :=
+          fun i ↦ Classical.choice (exists_binaryCompression (hA i) (f i))
+        let g : Operation 2 A B :=
+          fun i ↦ (compression i).toFun
+        have hgbox : IsBox Q g := by
+          intro y hy
+          apply hbox
+          intro i
+          rcases hy i with ⟨x, hx⟩
+          rcases (compression i).image_le x with ⟨z, hz⟩
+          exact ⟨z, hz.trans hx⟩
+        have hgpoly : Preserves P Q g :=
+          preserves_of_isBox hgbox
+        rcases hcertificateBinary g hgpoly with hdict | hcert
+        · rcases hdict with ⟨s, φ, hφΦ, hφ⟩
+          exact False.elim
+            ((compression i₀).not_eq_eval_of_nonconstant
+              hfi₀ s (φ i₀) (hφ i₀))
+        · rcases hcert with ⟨I, δ, hgconstant, hforce⟩
+          exact Or.inr ⟨I, δ, by
+            constructor
+            · intro i hi
+              exact (compression i).eq_const_of_toFun_eq_const
+                (δ i hi) (hgconstant i hi)
+            · exact hforce⟩
 
 end BoxTriviality
