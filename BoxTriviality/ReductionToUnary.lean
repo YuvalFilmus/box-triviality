@@ -188,6 +188,119 @@ lemma secondSection_classification
     secondSection f x ∈ Φ ∨ UnaryIsBox Q (secondSection f x) :=
   unary_classification hunary (secondSection_isUnaryPolymorphism hf hx)
 
+/--
+If all first and second sections belong to a synchronous permutation family,
+then two members of `P` agreeing in one coordinate agree everywhere.
+-/
+lemma eq_of_eq_coordinate_of_allSections_mem
+    (hperm : IsPermutationFamily Φ)
+    (hsync : IsSynchronous Φ)
+    {f : Operation 2 A A}
+    (hfirst : ∀ x ∈ P, firstSection f x ∈ Φ)
+    (hsecond : ∀ x ∈ P, secondSection f x ∈ Φ)
+    {z w : Tuple A} (hz : z ∈ P) (hw : w ∈ P)
+    (i : ι) (hi : z i = w i) :
+    z = w := by
+  have hfirstEq : firstSection f z = firstSection f w := by
+    apply hsync (firstSection f z) (hfirst z hz)
+      (firstSection f w) (hfirst w hw) i
+    funext a
+    simp [firstSection, hi]
+  funext j
+  apply (hperm (secondSection f z) (hsecond z hz) j).1
+  change f j (binaryPair (z j) (z j)) =
+    f j (binaryPair (w j) (z j))
+  exact congrFun (congrFun hfirstEq j) (z j)
+
+/--
+Under the preceding separation property and full projections, every alphabet
+symbol has a unique completion to a member of `P`.
+-/
+lemma existsUnique_completion
+    (hfull : HasFullProjections P)
+    (hseparate : ∀ {z w : Tuple A}, z ∈ P → w ∈ P →
+      ∀ i, z i = w i → z = w)
+    (i : ι) (a : A i) :
+    ∃! x : Tuple A, x ∈ P ∧ x i = a := by
+  rcases hfull i a with ⟨x, hx, hxi⟩
+  refine ⟨x, ⟨hx, hxi⟩, ?_⟩
+  intro y hy
+  exact hseparate hy.1 hx i (hy.2.trans hxi.symm)
+
+/-- The unique member of `P` having a prescribed value in one coordinate. -/
+noncomputable def completion
+    (hfull : HasFullProjections P)
+    (hseparate : ∀ {z w : Tuple A}, z ∈ P → w ∈ P →
+      ∀ i, z i = w i → z = w)
+    (i : ι) (a : A i) : Tuple A :=
+  Classical.choose (existsUnique_completion hfull hseparate i a)
+
+lemma completion_mem
+    (hfull : HasFullProjections P)
+    (hseparate : ∀ {z w : Tuple A}, z ∈ P → w ∈ P →
+      ∀ i, z i = w i → z = w)
+    (i : ι) (a : A i) :
+    completion hfull hseparate i a ∈ P :=
+  (Classical.choose_spec
+    (existsUnique_completion hfull hseparate i a)).1.1
+
+@[simp] lemma completion_at
+    (hfull : HasFullProjections P)
+    (hseparate : ∀ {z w : Tuple A}, z ∈ P → w ∈ P →
+      ∀ i, z i = w i → z = w)
+    (i : ι) (a : A i) :
+    completion hfull hseparate i a i = a :=
+  (Classical.choose_spec
+    (existsUnique_completion hfull hseparate i a)).1.2
+
+lemma completion_eq_of_mem
+    (hfull : HasFullProjections P)
+    (hseparate : ∀ {z w : Tuple A}, z ∈ P → w ∈ P →
+      ∀ i, z i = w i → z = w)
+    {x : Tuple A} (hx : x ∈ P) (i : ι) :
+    completion hfull hseparate i (x i) = x := by
+  exact hseparate (completion_mem hfull hseparate i (x i)) hx i
+    (completion_at hfull hseparate i (x i))
+
+/-- Transport alphabet symbols between two coordinates using their unique completions. -/
+noncomputable def coordinateMap
+    (hfull : HasFullProjections P)
+    (hseparate : ∀ {z w : Tuple A}, z ∈ P → w ∈ P →
+      ∀ i, z i = w i → z = w)
+    (i j : ι) : A i → A j :=
+  fun a ↦ completion hfull hseparate i a j
+
+/-- The coordinate transport map is injective. -/
+lemma coordinateMap_injective
+    (hfull : HasFullProjections P)
+    (hseparate : ∀ {z w : Tuple A}, z ∈ P → w ∈ P →
+      ∀ i, z i = w i → z = w)
+    (i j : ι) :
+    Function.Injective (coordinateMap hfull hseparate i j) := by
+  intro a b hab
+  have htuples : completion hfull hseparate i a =
+      completion hfull hseparate i b :=
+    hseparate
+      (completion_mem hfull hseparate i a)
+      (completion_mem hfull hseparate i b) j hab
+  have hat := congrFun htuples i
+  simpa using hat
+
+/-- The coordinate transport map is surjective. -/
+lemma coordinateMap_surjective
+    (hfull : HasFullProjections P)
+    (hseparate : ∀ {z w : Tuple A}, z ∈ P → w ∈ P →
+      ∀ i, z i = w i → z = w)
+    (i j : ι) :
+    Function.Surjective (coordinateMap hfull hseparate i j) := by
+  intro b
+  let x := completion hfull hseparate j b
+  refine ⟨x i, ?_⟩
+  change completion hfull hseparate i (x i) j = b
+  rw [completion_eq_of_mem hfull hseparate
+    (completion_mem hfull hseparate j b) i]
+  exact completion_at hfull hseparate j b
+
 /-- In a type with two distinct elements, every chosen element has a distinct peer. -/
 lemma exists_ne_of_hasAtLeastTwo
     {α : Type uι} (hα : HasAtLeastTwo α) (i : α) :
@@ -633,6 +746,125 @@ lemma no_nontrivial_single_coordinate_permutation
   exact hne (congrFun hψid i)
 
 /--
+In the separated situation, unary box-triviality and synchrony force every
+alphabet to be Boolean.
+-/
+lemma all_alphabets_boolean_of_separated
+    [Nonempty ι]
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hfull : HasFullProjections P)
+    (hseparate : ∀ {z w : Tuple A}, z ∈ P → w ∈ P →
+      ∀ i, z i = w i → z = w)
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hperm : IsPermutationFamily Φ)
+    (hsync : IsSynchronous Φ) :
+    ∀ i, HasExactlyTwo (A i) := by
+  classical
+  have hι : HasAtLeastTwo ι :=
+    index_hasAtLeastTwo hPQ hproper hfull
+  let k : ι := Classical.choice inferInstance
+  let a : A k := Classical.choose (hA k)
+  let y : Tuple A := completion hfull hseparate k a
+  let b : A k := Classical.choose (exists_ne_of_hasAtLeastTwo (hA k) (y k))
+  let ybar : Tuple A := completion hfull hseparate k b
+  have hyP : y ∈ P := completion_mem hfull hseparate k a
+  have hybarP : ybar ∈ P := completion_mem hfull hseparate k b
+  have hbne : b ≠ y k :=
+    Classical.choose_spec (exists_ne_of_hasAtLeastTwo (hA k) (y k))
+  have hybar_ne_y : ybar ≠ y := by
+    intro heq
+    have hk := congrFun heq k
+    have hybark : ybar k = b :=
+      completion_at hfull hseparate k b
+    exact hbne (hybark.symm.trans hk)
+  have hdiff : ∀ i, ybar i ≠ y i := by
+    intro i hi
+    exact hybar_ne_y (hseparate hybarP hyP i hi)
+  let g : UnaryMap A A := fun i t ↦
+    if t = y i then ybar i else t
+  have hgpoly : IsUnaryPolymorphism P Q g := by
+    intro x hx
+    by_cases hxy : x = y
+    · subst x
+      have hout : (fun i ↦ g i (y i)) = ybar := by
+        funext i
+        simp [g]
+      rw [hout]
+      exact hPQ hybarP
+    · have haway : ∀ i, x i ≠ y i := by
+        intro i hxi
+        exact hxy (hseparate hx hyP i hxi)
+      have hout : (fun i ↦ g i (x i)) = x := by
+        funext i
+        simp [g, haway i]
+      rw [hout]
+      exact hPQ hx
+  have hgnotmem : g ∉ Φ := by
+    intro hgmem
+    have heq : g k (y k) = g k (ybar k) := by
+      simp [g]
+    have := (hperm g hgmem k).1 heq
+    exact hdiff k this.symm
+  have hgbox : UnaryIsBox Q g := by
+    rcases unary_classification hunary hgpoly with hmem | hbox
+    · exact False.elim (hgnotmem hmem)
+    · exact hbox
+  have hallQ : ∀ z : Tuple A, (∀ i, z i ≠ y i) → z ∈ Q := by
+    intro z hz
+    apply hgbox
+    intro i
+    exact ⟨z i, by simp [g, hz i]⟩
+  intro i
+  by_contra hnotTwo
+  rcases exists_two_away_of_not_exactlyTwo (hA i) (y i) hnotTwo with
+    ⟨p, q, hpy, hqy, hpq⟩
+  let ψ : UnaryMap A A := singleCoordinateSwap i p q
+  have hψpoly : IsUnaryPolymorphism P Q ψ := by
+    intro x hx
+    by_cases hxy : x = y
+    · subst x
+      have hout : (fun j ↦ ψ j (y j)) = y := by
+        funext j
+        by_cases hji : j = i
+        · subst j
+          rw [show ψ i = swapValues p q by simp [ψ]]
+          exact swapValues_away (Ne.symm hpy) (Ne.symm hqy)
+        · simp [ψ, hji, identityUnary]
+      rw [hout]
+      exact hPQ hyP
+    · apply hallQ
+      intro j
+      have hxjy : x j ≠ y j := by
+        intro hxj
+        exact hxy (hseparate hx hyP j hxj)
+      by_cases hji : j = i
+      · subst j
+        rw [show ψ i = swapValues p q by simp [ψ]]
+        by_cases hxp : x i = p
+        · rw [hxp]
+          simpa using hqy
+        · by_cases hxq : x i = q
+          · rw [hxq]
+            simpa using hpy
+          · simpa [swapValues_away hxp hxq] using hxjy
+      · simpa [ψ, hji, identityUnary] using hxjy
+  have hψsurj : ∀ j, Function.Surjective (ψ j) :=
+    singleCoordinateSwap_surjective i p q
+  have hψaway : ∀ j, j ≠ i →
+      ψ j = identityUnary (A := A) j := by
+    intro j hji
+    exact singleCoordinateSwap_away i j hji p q
+  have hψne : ψ i ≠ identityUnary (A := A) i := by
+    intro heq
+    have hat := congrFun heq p
+    have hqp : q = p := by simpa [ψ, identityUnary] using hat
+    exact hpq hqp.symm
+  exact no_nontrivial_single_coordinate_permutation
+    hunary hPQ hproper hperm hsync hι hψpoly hψsurj hψaway hψne
+
+/--
 A nonconstant distinguished section in the all-box setup produces a unit
 witness. If its alphabet had a third value, a transposition away from `ω`
 would contradict synchrony.
@@ -846,6 +1078,141 @@ lemma exists_complementation {α : Type uA}
       rcases hall x with hxp | hxq
       · exact Or.inr (by simpa [complement, ha] using hxp)
       · exact Or.inl (hxq.trans haq.symm)
+
+/--
+The Boolean branch of the all-dictator-sections argument. A relation with
+full projections whose members are separated in every coordinate has exactly
+two members; unary box-triviality then gives the generalized-upset closure.
+-/
+lemma generalizedUpset_of_boolean_separated
+    [Nonempty ι]
+    (htwo : ∀ i, HasExactlyTwo (A i))
+    (hPQ : P ⊆ Q)
+    (hfull : HasFullProjections P)
+    (hseparate : ∀ {z w : Tuple A}, z ∈ P → w ∈ P →
+      ∀ i, z i = w i → z = w)
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hperm : IsPermutationFamily Φ) :
+    HasGeneralizedUpset P Q := by
+  classical
+  let c : ∀ i, Complementation (A i) :=
+    fun i ↦ Classical.choice (exists_complementation (htwo i))
+  let k : ι := Classical.choice inferInstance
+  let a : A k := Classical.choose (htwo k)
+  let y : Tuple A := completion hfull hseparate k a
+  let b : A k := (c k).complement (y k)
+  let ybar : Tuple A := completion hfull hseparate k b
+  have hyP : y ∈ P := completion_mem hfull hseparate k a
+  have hybarP : ybar ∈ P := completion_mem hfull hseparate k b
+  have hybar_ne_y : ybar ≠ y := by
+    intro heq
+    have hk := congrFun heq k
+    have hybark : ybar k = b :=
+      completion_at hfull hseparate k b
+    exact (c k).complement_ne (y k) (hybark.symm.trans hk)
+  have hdiff : ∀ i, ybar i ≠ y i := by
+    intro i hi
+    exact hybar_ne_y (hseparate hybarP hyP i hi)
+  have hbar : ∀ i, ybar i = (c i).complement (y i) := by
+    intro i
+    rcases (c i).eq_or_eq_complement (y i) (ybar i) with hi | hi
+    · exact False.elim (hdiff i hi)
+    · exact hi
+  have hchoices : ∀ i t, t = y i ∨ t = ybar i := by
+    intro i t
+    rcases (c i).eq_or_eq_complement (y i) t with hi | hi
+    · exact Or.inl hi
+    · exact Or.inr (hi.trans (hbar i).symm)
+  have hPtwo : ∀ x ∈ P, x = y ∨ x = ybar := by
+    intro x hx
+    rcases hchoices k (x k) with hxk | hxk
+    · exact Or.inl (hseparate hx hyP k hxk)
+    · exact Or.inr (hseparate hx hybarP k hxk)
+  refine ⟨htwo, y, hyP, ?_⟩
+  intro x hxQ hxy
+  have hi : ∃ i, x i ≠ y i := by
+    by_contra hnone
+    apply hxy
+    funext i
+    by_contra hne
+    exact hnone ⟨i, hne⟩
+  rcases hi with ⟨i₀, hxi₀⟩
+  have hxi₀bar : x i₀ = ybar i₀ := by
+    rcases hchoices i₀ (x i₀) with hi | hi
+    · exact False.elim (hxi₀ hi)
+    · exact hi
+  let η : UnaryMap A A := fun i t ↦
+    if t = y i then ybar i else x i
+  have hηpoly : IsUnaryPolymorphism P Q η := by
+    intro z hz
+    rcases hPtwo z hz with hzy | hzybar
+    · subst z
+      have hout : (fun i ↦ η i (y i)) = ybar := by
+        funext i
+        simp [η]
+      rw [hout]
+      exact hPQ hybarP
+    · subst z
+      have hout : (fun i ↦ η i (ybar i)) = x := by
+        funext i
+        simp [η, hdiff i]
+      rw [hout]
+      exact hxQ
+  have hηnotmem : η ∉ Φ := by
+    intro hηmem
+    have heq :
+        η i₀ (y i₀) = η i₀ (ybar i₀) := by
+      simp [η, hdiff i₀, hxi₀bar]
+    have := (hperm η hηmem i₀).1 heq
+    exact hdiff i₀ this.symm
+  have hηbox : UnaryIsBox Q η := by
+    rcases unary_classification hunary hηpoly with hmem | hbox
+    · exact False.elim (hηnotmem hmem)
+    · exact hbox
+  intro z hz
+  apply hηbox
+  intro i
+  rcases hz i with hzx | hzney
+  · refine ⟨ybar i, ?_⟩
+    simpa [η, hdiff i] using hzx.symm
+  · have hzbar : z i = ybar i := by
+      rcases hchoices i (z i) with hzy | hzybar
+      · exact False.elim (hzney hzy)
+      · exact hzybar
+    refine ⟨y i, ?_⟩
+    simpa [η] using hzbar.symm
+
+/--
+The all-dictator-sections lemma from the proof of Theorem 1.4.
+
+When every first and second section belongs to `Φ`, synchrony separates the
+members of `P`; the preceding lemmas then force Boolean alphabets and produce
+a generalized-upset obstruction.
+-/
+lemma allDictatorSections
+    [Nonempty ι]
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hfull : HasFullProjections P)
+    (hperm : IsPermutationFamily Φ)
+    (hsync : IsSynchronous Φ)
+    {f : Operation 2 A A}
+    (hfirst : ∀ x ∈ P, firstSection f x ∈ Φ)
+    (hsecond : ∀ x ∈ P, secondSection f x ∈ Φ) :
+    HasGeneralizedUpset P Q := by
+  have hseparate :
+      ∀ {z w : Tuple A}, z ∈ P → w ∈ P →
+        ∀ i, z i = w i → z = w := by
+    intro z w hz hw i hi
+    exact eq_of_eq_coordinate_of_allSections_mem
+      hperm hsync hfirst hsecond hz hw i hi
+  have htwo : ∀ i, HasExactlyTwo (A i) :=
+    all_alphabets_boolean_of_separated
+      hA hPQ hproper hfull hseparate hunary hperm hsync
+  exact generalizedUpset_of_boolean_separated
+    htwo hPQ hfull hseparate hunary hperm
 
 /-- The binary operation associated with a generalized-upset obstruction. -/
 noncomputable def generalizedUpsetOperation
