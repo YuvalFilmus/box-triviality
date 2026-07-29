@@ -441,6 +441,115 @@ lemma mixedNormalization_not_boxTrivial
       exact hσκ (heq.symm ▸ hτκ)
   · exact hfnotbox ((normalizeFirstSections_isBox_iff).1 hbox)
 
+/-- Swap the two inputs of a binary operation. -/
+def transposeBinary (f : Operation 2 A A) : Operation 2 A A :=
+  fun i input ↦ f i (binaryPair (input 1) (input 0))
+
+@[simp] lemma transposeBinary_pair
+    (f : Operation 2 A A) (i : ι) (a b : A i) :
+    transposeBinary f i (binaryPair a b) =
+      f i (binaryPair b a) := rfl
+
+@[simp] lemma transposeBinary_involutive (f : Operation 2 A A) :
+    transposeBinary (transposeBinary f) = f := by
+  funext i input
+  rw [← binaryPair_eta input]
+  rfl
+
+/-- First sections of the transpose are second sections of the original. -/
+lemma firstSection_transposeBinary
+    (f : Operation 2 A A) (x : Tuple A) :
+    firstSection (transposeBinary f) x = secondSection f x := by
+  funext i a
+  rfl
+
+/-- Transposing a binary polymorphism preserves the polymorphism property. -/
+lemma transposeBinary_preserves
+    {f : Operation 2 A A} (hf : Preserves P Q f) :
+    Preserves P Q (transposeBinary f) := by
+  intro rows hrows
+  let swapped : Fin 2 → Tuple A :=
+    Fin.cases (rows 1) (fun _ ↦ rows 0)
+  have hswapped : ∀ r, swapped r ∈ P := by
+    intro r
+    refine Fin.cases (hrows 1) (fun s ↦ ?_) r
+    have hs : s = 0 := Fin.eq_zero s
+    subst s
+    exact hrows 0
+  have heq :
+      applyOperation (transposeBinary f) rows =
+        applyOperation f swapped := by
+    funext i
+    change f i (binaryPair (rows 1 i) (rows 0 i)) =
+      f i (fun r ↦ swapped r i)
+    apply congrArg (f i)
+    funext r
+    refine Fin.cases rfl (fun s ↦ ?_) r
+    have hs : s = 0 := Fin.eq_zero s
+    subst s
+    rfl
+  rw [heq]
+  exact hf swapped hswapped
+
+/-- Transposition preserves the full coordinate image box. -/
+lemma transposeBinary_inImageBox_iff
+    {f : Operation 2 A A} {y : Tuple A} :
+    InImageBox (transposeBinary f) y ↔ InImageBox f y := by
+  constructor
+  · intro hy i
+    rcases hy i with ⟨input, hinput⟩
+    exact ⟨binaryPair (input 1) (input 0), hinput⟩
+  · intro hy i
+    rcases hy i with ⟨input, hinput⟩
+    refine ⟨binaryPair (input 1) (input 0), ?_⟩
+    simpa [transposeBinary] using hinput
+
+/-- Transposition preserves box type. -/
+lemma transposeBinary_isBox_iff
+    {f : Operation 2 A A} :
+    IsBox Q (transposeBinary f) ↔ IsBox Q f := by
+  constructor
+  · intro hbox y hy
+    exact hbox ((transposeBinary_inImageBox_iff).2 hy)
+  · intro hbox y hy
+    exact hbox ((transposeBinary_inImageBox_iff).1 hy)
+
+/-- Transposition exchanges the two possible dictator coordinates. -/
+lemma transposeBinary_isDictator_iff
+    {f : Operation 2 A A} :
+    IsDictator Φ (transposeBinary f) ↔ IsDictator Φ f := by
+  have forward : ∀ g : Operation 2 A A,
+      IsDictator Φ g → IsDictator Φ (transposeBinary g) := by
+    intro g hg
+    rcases hg with ⟨s, φ, hφmem, hφ⟩
+    have hs : s = 0 ∨ s = 1 := by
+      refine Fin.cases (Or.inl rfl) (fun q ↦ ?_) s
+      have hq : q = 0 := Fin.eq_zero q
+      subst q
+      exact Or.inr rfl
+    rcases hs with hs | hs
+    · subst s
+      refine ⟨1, φ, hφmem, ?_⟩
+      intro i input
+      rw [← binaryPair_eta input]
+      simp [transposeBinary, hφ]
+    · subst s
+      refine ⟨0, φ, hφmem, ?_⟩
+      intro i input
+      rw [← binaryPair_eta input]
+      simp [transposeBinary, hφ]
+  constructor
+  · intro h
+    have ht := forward (transposeBinary f) h
+    simpa using ht
+  · exact forward f
+
+/-- Transposition preserves `Φ`-box-triviality. -/
+lemma transposeBinary_isBoxTrivial_iff
+    {f : Operation 2 A A} :
+    IsBoxTrivial Q Φ (transposeBinary f) ↔ IsBoxTrivial Q Φ f := by
+  exact or_congr transposeBinary_isDictator_iff transposeBinary_isBox_iff
+
 /--
 If all first and second sections belong to a synchronous permutation family,
 then two members of `P` agreeing in one coordinate agree everywhere.
@@ -1295,6 +1404,103 @@ lemma allBoxSections
       (unitWitness_of_distinguishedSection_nonconstant
         hA hunary hPQ hproper hperm hsync hι hsections
         hg hgω hgmem hnonconstant)
+
+/--
+In the mixed non-box case, and in the absence of a unit witness, some second
+section of the normalized operation belongs to `Φ`. This is the distinguished
+tuple `y` used in both remaining branches of the proof.
+-/
+lemma exists_normalized_secondSection_mem
+    [Nonempty ι]
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hfull : HasFullProjections P)
+    (hperm : IsPermutationFamily Φ)
+    (hsync : IsSynchronous Φ)
+    {f : Operation 2 A A} (hf : Preserves P Q f)
+    {σ τ : Tuple A}
+    (hσbox : UnaryIsBox Q (firstSection f σ))
+    (hτmem : firstSection f τ ∈ Φ)
+    (hfnotbox : ¬ IsBox Q f)
+    (hnoUnit : ¬ HasUnitWitness Q) :
+    ∃ y ∈ P, secondSection (normalizeFirstSections f) y ∈ Φ := by
+  have hnorm :
+      Preserves P Q (normalizeFirstSections f) :=
+    normalizeFirstSections_preserves hunary hPQ hperm hf
+  have hnormNotTrivial :
+      ¬ IsBoxTrivial Q Φ (normalizeFirstSections f) :=
+    mixedNormalization_not_boxTrivial
+      hA hunary hPQ hproper hperm hf hσbox hτmem hfnotbox
+  by_contra hnone
+  have hallSecondBox : ∀ x ∈ P,
+      UnaryIsBox Q (secondSection (normalizeFirstSections f) x) := by
+    intro x hx
+    rcases secondSection_classification hunary hnorm hx with hmem | hbox
+    · exact False.elim (hnone ⟨x, hx, hmem⟩)
+    · exact hbox
+  have hallFirstTranspose : ∀ x ∈ P,
+      UnaryIsBox Q
+        (firstSection (transposeBinary (normalizeFirstSections f)) x) := by
+    intro x hx
+    rw [firstSection_transposeBinary]
+    exact hallSecondBox x hx
+  rcases allBoxSections hA hunary hPQ hproper hfull hperm hsync
+      (transposeBinary_preserves hnorm) hallFirstTranspose with
+    htrivial | hunit
+  · exact hnormNotTrivial
+      ((transposeBinary_isBoxTrivial_iff).1 htrivial)
+  · exact hnoUnit hunit
+
+/--
+Once a normalized second section belongs to `Φ`, a permutation-valued first
+section can occur only at the distinguished tuple `τ`.
+-/
+lemma permutation_input_eq_of_normalized_secondSection_mem
+    (hperm : IsPermutationFamily Φ)
+    {f : Operation 2 A A} {τ y : Tuple A}
+    (hτmem : firstSection f τ ∈ Φ)
+    (hymem : secondSection (normalizeFirstSections f) y ∈ Φ) :
+    ∀ i a, FirstSectionIsPermutation f i a → a = τ i := by
+  have hτperm : ∀ i, FirstSectionIsPermutation f i (τ i) := by
+    intro i
+    exact hperm (firstSection f τ) hτmem i
+  intro i a ha
+  apply (hperm
+    (secondSection (normalizeFirstSections f) y) hymem i).1
+  change normalizeFirstSections f i (binaryPair a (y i)) =
+    normalizeFirstSections f i (binaryPair (τ i) (y i))
+  rw [normalizeFirstSections_of_permutation f i a (y i) ha,
+    normalizeFirstSections_of_permutation
+      f i (τ i) (y i) (hτperm i)]
+
+/--
+Every normalized first section over a member of `P` other than `τ` has box
+type.
+-/
+lemma normalized_firstSection_box_of_ne
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hperm : IsPermutationFamily Φ)
+    {f : Operation 2 A A} (hf : Preserves P Q f)
+    {τ y x : Tuple A}
+    (hτmem : firstSection f τ ∈ Φ)
+    (hymem : secondSection (normalizeFirstSections f) y ∈ Φ)
+    (hx : x ∈ P) (hxτ : x ≠ τ) :
+    UnaryIsBox Q (firstSection (normalizeFirstSections f) x) := by
+  rcases firstSection_classification hunary hf hx with hmem | hbox
+  · apply False.elim
+    apply hxτ
+    funext i
+    exact permutation_input_eq_of_normalized_secondSection_mem
+      hperm hτmem hymem i (x i) (hperm (firstSection f x) hmem i)
+  · intro z hz
+    apply hbox
+    intro i
+    rcases hz i with ⟨b, hb⟩
+    rcases (normalized_firstSection_image_iff i (x i) (z i)).1
+      ⟨b, by simpa [firstSection] using hb⟩ with ⟨a, ha⟩
+    exact ⟨a, by simpa [firstSection] using ha⟩
 
 /-- A choice of the complement operation on a two-element type. -/
 structure Complementation (α : Type uA) where
