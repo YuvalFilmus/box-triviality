@@ -3,7 +3,7 @@
 A Lean 4 formalization of the results in *Triviality of promise
 polymorphisms*.
 
-The formalization is being developed in four stages:
+The formalization is being developed in five stages:
 
 1. foundational definitions;
 2. the reduction to binary (Theorem 1.3);
@@ -31,6 +31,15 @@ formalizes Theorem 1.3. Its main result is
 `boxTrivialAtAllArities_iff_binary`. The same file formalizes Corollary 3.3
 as `certificateTrivialAtAllArities_iff_binary`. Both proofs work for arbitrary
 coordinate types and arbitrary, possibly infinite, alphabets.
+
+[`BoxTriviality/ReductionToUnary.lean`](BoxTriviality/ReductionToUnary.lean)
+formalizes Theorem 1.4 as
+`boxTrivialAtAllArities_iff_unary_no_obstructions`.
+
+[`BoxTriviality/Examples.lean`](BoxTriviality/Examples.lean) formalizes both
+examples from the introduction: the relation which is box-trivial in every
+positive arity but not certificate-trivial even in unary arity, and the
+different-alphabet counterexample from the remark.
 
 ## Building
 
