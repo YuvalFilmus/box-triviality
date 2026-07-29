@@ -106,6 +106,14 @@ def binaryPair {α : Type uA} (a b : α) : Fin 2 → α :=
 @[simp] lemma binaryPair_one {α : Type uA} (a b : α) :
     binaryPair a b 1 = b := rfl
 
+@[simp] lemma binaryPair_eta {α : Type uA} (x : Fin 2 → α) :
+    binaryPair (x 0) (x 1) = x := by
+  funext r
+  refine Fin.cases rfl (fun s ↦ ?_) r
+  have hs : s = 0 := Fin.eq_zero s
+  subst s
+  rfl
+
 /-- A binary operation with its first input fixed to a tuple. -/
 def firstSection (f : Operation 2 A A) (x : Tuple A) : UnaryMap A A :=
   fun i a ↦ f i (binaryPair (x i) a)
@@ -180,6 +188,246 @@ lemma secondSection_classification
     secondSection f x ∈ Φ ∨ UnaryIsBox Q (secondSection f x) :=
   unary_classification hunary (secondSection_isUnaryPolymorphism hf hx)
 
+/-- In a type with two distinct elements, every chosen element has a distinct peer. -/
+lemma exists_ne_of_hasAtLeastTwo
+    {α : Type uι} (hα : HasAtLeastTwo α) (i : α) :
+    ∃ j, j ≠ i := by
+  rcases hα with ⟨a, b, hab⟩
+  by_cases hai : a = i
+  · exact ⟨b, fun hbi ↦ hab (hai.trans hbi.symm)⟩
+  · exact ⟨a, hai⟩
+
+/--
+A unary map chooses from the first-input sections of `f` if each value
+`g i a` lies in the image of the section obtained by fixing the first input
+to `a`.
+-/
+def ChoosesFirstSections (f : Operation 2 A A) (g : UnaryMap A A) : Prop :=
+  ∀ i a, ∃ b, f i (binaryPair a b) = g i a
+
+/--
+If every first section over a member of `P` has box type, then every map which
+chooses pointwise from those sections is a unary polymorphism.
+-/
+lemma choosingFirstSections_isUnaryPolymorphism
+    {f : Operation 2 A A}
+    (hsections : ∀ x ∈ P, UnaryIsBox Q (firstSection f x))
+    {g : UnaryMap A A} (hg : ChoosesFirstSections f g) :
+    IsUnaryPolymorphism P Q g := by
+  intro x hx
+  apply hsections x hx
+  intro i
+  rcases hg i (x i) with ⟨b, hb⟩
+  exact ⟨b, by simpa [firstSection] using hb⟩
+
+/-- Failure of binary box type supplies a tuple outside `Q` in the image box. -/
+lemma exists_image_witness_of_not_box
+    {f : Operation 2 A A} (hf : ¬ IsBox Q f) :
+    ∃ ω : Tuple A, ω ∉ Q ∧ InImageBox f ω := by
+  classical
+  by_contra hnot
+  apply hf
+  intro y hy
+  by_contra hyQ
+  exact hnot ⟨y, hyQ, hy⟩
+
+/--
+Choose one value from every first section while forcing a prescribed image-box
+witness `ω` to occur at a tuple `α`.
+-/
+lemma exists_firstSection_selection
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    {f : Operation 2 A A} {ω : Tuple A}
+    (hω : InImageBox f ω) :
+    ∃ α : Tuple A, ∃ g : UnaryMap A A,
+      ChoosesFirstSections f g ∧ ∀ i, g i (α i) = ω i := by
+  classical
+  choose col hcol using hω
+  let α : Tuple A := fun i ↦ col i 0
+  let d : Tuple A := fun i ↦ Classical.choose (hA i)
+  let g : UnaryMap A A := fun i a ↦
+    if a = α i then ω i else f i (binaryPair a (d i))
+  refine ⟨α, g, ?_, ?_⟩
+  · intro i a
+    by_cases hai : a = α i
+    · subst a
+      refine ⟨col i 1, ?_⟩
+      simpa [g, α] using hcol i
+    · exact ⟨d i, by simp [g, hai]⟩
+  · intro i
+    simp [g]
+
+/--
+The selection forced through a tuple `ω ∉ Q` belongs to `Φ`: it is a unary
+polymorphism, and the occurrence of `ω` rules out unary box type.
+-/
+lemma firstSection_selection_mem
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    {f : Operation 2 A A}
+    (hsections : ∀ x ∈ P, UnaryIsBox Q (firstSection f x))
+    {ω α : Tuple A} (hωQ : ω ∉ Q)
+    {g : UnaryMap A A}
+    (hg : ChoosesFirstSections f g)
+    (hgω : ∀ i, g i (α i) = ω i) :
+    g ∈ Φ := by
+  have hgpoly : IsUnaryPolymorphism P Q g :=
+    choosingFirstSections_isUnaryPolymorphism hsections hg
+  rcases unary_classification hunary hgpoly with hmem | hbox
+  · exact hmem
+  · exact False.elim (hωQ (hbox (fun i ↦ ⟨α i, hgω i⟩)))
+
+/-- Change one value of one component of a unary multisorted map. -/
+noncomputable def modifyUnary (g : UnaryMap A A) (i : ι)
+    (a value : A i) : UnaryMap A A := by
+  classical
+  intro j
+  by_cases hji : j = i
+  · subst j
+    exact fun x ↦ if x = a then value else g i x
+  · exact g j
+
+@[simp] lemma modifyUnary_at_eq (g : UnaryMap A A) (i : ι)
+    (a value : A i) :
+    modifyUnary g i a value i a = value := by
+  classical
+  simp [modifyUnary]
+
+@[simp] lemma modifyUnary_at_ne (g : UnaryMap A A) (i : ι)
+    (a value x : A i) (hxa : x ≠ a) :
+    modifyUnary g i a value i x = g i x := by
+  classical
+  simp [modifyUnary, hxa]
+
+@[simp] lemma modifyUnary_away (g : UnaryMap A A) (i j : ι)
+    (hji : j ≠ i) (a value : A i) (x : A j) :
+    modifyUnary g i a value j x = g j x := by
+  classical
+  simp [modifyUnary, hji]
+
+/-- A pointwise modification remains a choice from the first sections. -/
+lemma modifyUnary_choosesFirstSections
+    {f : Operation 2 A A} {g : UnaryMap A A}
+    (hg : ChoosesFirstSections f g)
+    (i : ι) (a value : A i)
+    (hvalue : ∃ b, f i (binaryPair a b) = value) :
+    ChoosesFirstSections f (modifyUnary g i a value) := by
+  classical
+  intro j x
+  by_cases hji : j = i
+  · subst j
+    by_cases hxa : x = a
+    · subst x
+      simpa using hvalue
+    · rcases hg i x with ⟨b, hb⟩
+      exact ⟨b, by simpa [hxa] using hb⟩
+  · rcases hg j x with ⟨b, hb⟩
+    exact ⟨b, by simpa [modifyUnary, hji] using hb⟩
+
+/--
+Two forced selections which differ only in one component must agree, by
+synchrony and the existence of another coordinate.
+-/
+lemma forced_selections_agree
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hsync : IsSynchronous Φ)
+    (hι : HasAtLeastTwo ι)
+    {f : Operation 2 A A}
+    (hsections : ∀ x ∈ P, UnaryIsBox Q (firstSection f x))
+    {ω α : Tuple A} (hωQ : ω ∉ Q)
+    {g : UnaryMap A A}
+    (hg : ChoosesFirstSections f g)
+    (hgω : ∀ i, g i (α i) = ω i)
+    (i : ι) (a : A i) (hai : a ≠ α i)
+    (v w : A i)
+    (hv : ∃ b, f i (binaryPair a b) = v)
+    (hw : ∃ b, f i (binaryPair a b) = w) :
+    v = w := by
+  classical
+  let gv : UnaryMap A A := modifyUnary g i a v
+  let gw : UnaryMap A A := modifyUnary g i a w
+  have hgvchoose : ChoosesFirstSections f gv :=
+    modifyUnary_choosesFirstSections hg i a v hv
+  have hgwchoose : ChoosesFirstSections f gw :=
+    modifyUnary_choosesFirstSections hg i a w hw
+  have hgvω : ∀ j, gv j (α j) = ω j := by
+    intro j
+    by_cases hji : j = i
+    · subst j
+      change modifyUnary g i a v i (α i) = ω i
+      rw [modifyUnary_at_ne _ _ _ _ _ (Ne.symm hai)]
+      exact hgω i
+    · simpa [gv, modifyUnary, hji] using hgω j
+  have hgwω : ∀ j, gw j (α j) = ω j := by
+    intro j
+    by_cases hji : j = i
+    · subst j
+      change modifyUnary g i a w i (α i) = ω i
+      rw [modifyUnary_at_ne _ _ _ _ _ (Ne.symm hai)]
+      exact hgω i
+    · simpa [gw, modifyUnary, hji] using hgω j
+  have hgvmem : gv ∈ Φ :=
+    firstSection_selection_mem hunary hsections hωQ hgvchoose hgvω
+  have hgwmem : gw ∈ Φ :=
+    firstSection_selection_mem hunary hsections hωQ hgwchoose hgwω
+  rcases exists_ne_of_hasAtLeastTwo hι i with ⟨j, hji⟩
+  have hcoord : gv j = gw j := by
+    funext x
+    simp [gv, gw, hji]
+  have hmaps : gv = gw := hsync gv hgvmem gw hgwmem j hcoord
+  have hat := congrFun (congrFun hmaps i) a
+  simpa [gv, gw] using hat
+
+/--
+All first sections away from the distinguished witness input are constant.
+This is the central synchrony conclusion in the all-box-sections lemma.
+-/
+lemma firstSections_constant_away
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hsync : IsSynchronous Φ)
+    (hι : HasAtLeastTwo ι)
+    {f : Operation 2 A A}
+    (hsections : ∀ x ∈ P, UnaryIsBox Q (firstSection f x))
+    {ω α : Tuple A} (hωQ : ω ∉ Q)
+    {g : UnaryMap A A}
+    (hg : ChoosesFirstSections f g)
+    (hgω : ∀ i, g i (α i) = ω i) :
+    ∀ i a, a ≠ α i → ∀ b c,
+      f i (binaryPair a b) = f i (binaryPair a c) := by
+  intro i a hai b c
+  exact forced_selections_agree hunary hsync hι hsections hωQ hg hgω
+    i a hai
+    (f i (binaryPair a b)) (f i (binaryPair a c))
+    ⟨b, rfl⟩ ⟨c, rfl⟩
+
+/--
+The common setup extracted from a non-box binary operation whose first
+sections are all boxes: a forbidden image tuple, a forced selection belonging
+to `Φ`, and constancy of every section away from the distinguished inputs.
+-/
+lemma allBoxSections_setup
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hsync : IsSynchronous Φ)
+    (hι : HasAtLeastTwo ι)
+    {f : Operation 2 A A}
+    (hsections : ∀ x ∈ P, UnaryIsBox Q (firstSection f x))
+    (hnbox : ¬ IsBox Q f) :
+    ∃ ω : Tuple A, ω ∉ Q ∧
+      ∃ α : Tuple A, ∃ g : UnaryMap A A,
+        ChoosesFirstSections f g ∧
+        (∀ i, g i (α i) = ω i) ∧
+        g ∈ Φ ∧
+        ∀ i a, a ≠ α i → ∀ b c,
+          f i (binaryPair a b) = f i (binaryPair a c) := by
+  rcases exists_image_witness_of_not_box hnbox with ⟨ω, hωQ, hωimage⟩
+  rcases exists_firstSection_selection hA hωimage with
+    ⟨α, g, hg, hgω⟩
+  have hgmem : g ∈ Φ :=
+    firstSection_selection_mem hunary hsections hωQ hg hgω
+  have hconstant :=
+    firstSections_constant_away hunary hsync hι hsections hωQ hg hgω
+  exact ⟨ω, hωQ, α, g, hg, hgω, hgmem, hconstant⟩
+
 /--
 Full projections and a proper promise force the relation to have at least two
 coordinates. This is used whenever synchrony is tested away from one chosen
@@ -231,15 +479,6 @@ lemma identityUnary_mem
     apply False.elim (hz (hbox ?_))
     intro i
     exact ⟨z i, rfl⟩
-
-/-- In a type with two distinct elements, every chosen element has a distinct peer. -/
-lemma exists_ne_of_hasAtLeastTwo
-    {α : Type uι} (hα : HasAtLeastTwo α) (i : α) :
-    ∃ j, j ≠ i := by
-  rcases hα with ⟨a, b, hab⟩
-  by_cases hai : a = i
-  · exact ⟨b, fun hbi ↦ hab (hai.trans hbi.symm)⟩
-  · exact ⟨a, hai⟩
 
 /--
 Synchrony forbids a nontrivial unary permutation which changes only one
