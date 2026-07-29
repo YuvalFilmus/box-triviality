@@ -1654,6 +1654,104 @@ lemma exists_mixedClosure_base
   exact ⟨y, hyP,
     normalized_hasMixedClosure hunary hPQ hperm hf hτmem hymem⟩
 
+/-- The final unary map in the non-Boolean mixed branch. -/
+noncomputable def mixedNonBooleanMap
+    (y ω κ : Tuple A) : UnaryMap A A := by
+  classical
+  exact fun i a ↦
+    if a = y i then y i else if y i = ω i then κ i else ω i
+
+/--
+Mixed closure is incompatible with a non-Boolean alphabet under unary
+box-triviality: the map `χ` is a polymorphism but is neither a permutation
+tuple nor box type.
+-/
+lemma false_of_mixedClosure_nonBoolean
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hperm : IsPermutationFamily Φ)
+    {y : Tuple A} (hyP : y ∈ P)
+    (hclosure : HasMixedClosure P Q y)
+    (hnonBoolean : ∃ i, ¬ HasExactlyTwo (A i))
+    {ω : Tuple A} (hωQ : ω ∉ Q) :
+    False := by
+  classical
+  let κ : Tuple A := fun i ↦
+    Classical.choose (exists_ne_of_hasAtLeastTwo (hA i) (ω i))
+  have hκω : ∀ i, κ i ≠ ω i := by
+    intro i
+    exact Classical.choose_spec
+      (exists_ne_of_hasAtLeastTwo (hA i) (ω i))
+  let χ : UnaryMap A A := mixedNonBooleanMap y ω κ
+  have hχpoly : IsUnaryPolymorphism P Q χ := by
+    intro z hzP
+    by_cases hzy : z = y
+    · subst z
+      have hout : (fun i ↦ χ i (y i)) = y := by
+        funext i
+        simp [χ, mixedNonBooleanMap]
+      rw [hout]
+      exact hPQ hyP
+    · apply hclosure z hzP hzy
+      intro i hziy
+      change mixedNonBooleanMap y ω κ i (z i) ≠ y i
+      by_cases hyω : y i = ω i
+      · have hziω : z i ≠ ω i :=
+          fun h ↦ hziy (h.trans hyω.symm)
+        simp [mixedNonBooleanMap, hyω, hziω, hκω i]
+      · simp [mixedNonBooleanMap, hziy, hyω, Ne.symm hyω]
+  have hχnotmem : χ ∉ Φ := by
+    intro hχmem
+    rcases hnonBoolean with ⟨i, hnotTwo⟩
+    rcases exists_two_away_of_not_exactlyTwo (hA i) (y i) hnotTwo with
+      ⟨a, b, hay, hby, hab⟩
+    have heq : χ i a = χ i b := by
+      simp [χ, mixedNonBooleanMap, hay, hby]
+    have := (hperm χ hχmem i).1 heq
+    exact hab this
+  have hωimage : ∀ i, ∃ a, χ i a = ω i := by
+    intro i
+    by_cases hyω : y i = ω i
+    · exact ⟨y i, by simp [χ, mixedNonBooleanMap, hyω]⟩
+    · rcases exists_ne_of_hasAtLeastTwo (hA i) (y i) with ⟨a, hay⟩
+      exact ⟨a, by simp [χ, mixedNonBooleanMap, hay, hyω]⟩
+  rcases unary_classification hunary hχpoly with hmem | hbox
+  · exact hχnotmem hmem
+  · exact hωQ (hbox hωimage)
+
+/--
+The non-Boolean mixed-section lemma from the proof of Theorem 1.4.
+-/
+lemma mixedSections_nonBoolean
+    [Nonempty ι]
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hfull : HasFullProjections P)
+    (hperm : IsPermutationFamily Φ)
+    (hsync : IsSynchronous Φ)
+    {f : Operation 2 A A} (hf : Preserves P Q f)
+    {σ τ : Tuple A}
+    (hσbox : UnaryIsBox Q (firstSection f σ))
+    (hτmem : firstSection f τ ∈ Φ)
+    (hnonBoolean : ∃ i, ¬ HasExactlyTwo (A i)) :
+    IsBox Q f ∨ HasUnitWitness Q := by
+  classical
+  by_cases hbox : IsBox Q f
+  · exact Or.inl hbox
+  by_cases hunit : HasUnitWitness Q
+  · exact Or.inr hunit
+  rcases exists_mixedClosure_base
+      hA hunary hPQ hproper hfull hperm hsync hf
+      hσbox hτmem hbox hunit with
+    ⟨y, hyP, hclosure⟩
+  rcases hproper with ⟨ω, hωQ⟩
+  exact False.elim
+    (false_of_mixedClosure_nonBoolean
+      hA hunary hPQ hperm hyP hclosure hnonBoolean hωQ)
+
 /-- A choice of the complement operation on a two-element type. -/
 structure Complementation (α : Type uA) where
   complement : α → α
