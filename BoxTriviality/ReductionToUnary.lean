@@ -429,6 +429,30 @@ lemma allBoxSections_setup
   exact ⟨ω, hωQ, α, g, hg, hgω, hgmem, hconstant⟩
 
 /--
+If every first section, including the distinguished ones, is constant, then
+the binary operation depends only on its first input and is a dictator.
+-/
+lemma dictator_of_firstSections_constant
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    {f : Operation 2 A A} (hf : Preserves P Q f)
+    {x : Tuple A} (hx : x ∈ P)
+    {ω α : Tuple A} (hωQ : ω ∉ Q)
+    (hωsection : ∀ i, ∃ b, f i (binaryPair (α i) b) = ω i)
+    (hconstant : ∀ i a b c,
+      f i (binaryPair a b) = f i (binaryPair a c)) :
+    IsDictator Φ f := by
+  rcases secondSection_classification hunary hf hx with hmem | hbox
+  · refine ⟨0, secondSection f x, hmem, ?_⟩
+    intro i input
+    rw [← binaryPair_eta input]
+    exact hconstant i (input 0) (input 1) (x i)
+  · exact False.elim (hωQ (hbox (fun i ↦ by
+      rcases hωsection i with ⟨b, hb⟩
+      exact ⟨α i, by
+        change f i (binaryPair (α i) (x i)) = ω i
+        exact (hconstant i (α i) (x i) b).trans hb⟩)))
+
+/--
 Full projections and a proper promise force the relation to have at least two
 coordinates. This is used whenever synchrony is tested away from one chosen
 coordinate.
@@ -481,6 +505,99 @@ lemma identityUnary_mem
     exact ⟨z i, rfl⟩
 
 /--
+If an at-least-two-element type is not a two-element type, then two distinct
+elements can be found away from any prescribed element.
+-/
+lemma exists_two_away_of_not_exactlyTwo
+    {α : Type uA} (hα : HasAtLeastTwo α) (ω : α)
+    (hnot : ¬ HasExactlyTwo α) :
+    ∃ a b, a ≠ ω ∧ b ≠ ω ∧ a ≠ b := by
+  by_contra hnone
+  have hallAway : ∀ a, a ≠ ω → ∀ b, b ≠ ω → a = b := by
+    intro a ha b hb
+    by_contra hab
+    exact hnone ⟨a, b, ha, hb, hab⟩
+  rcases exists_ne_of_hasAtLeastTwo hα ω with ⟨p, hpω⟩
+  apply hnot
+  refine ⟨ω, p, Ne.symm hpω, ?_⟩
+  intro x
+  by_cases hxω : x = ω
+  · exact Or.inl hxω
+  · exact Or.inr (hallAway x hxω p hpω)
+
+/-- The transposition of two specified values. -/
+noncomputable def swapValues {α : Type uA} (a b : α) : α → α := by
+  classical
+  exact fun x ↦ if x = a then b else if x = b then a else x
+
+@[simp] lemma swapValues_left {α : Type uA} (a b : α) :
+    swapValues a b a = b := by
+  classical
+  simp [swapValues]
+
+@[simp] lemma swapValues_right {α : Type uA} (a b : α) :
+    swapValues a b b = a := by
+  classical
+  by_cases hba : b = a
+  · subst b
+    simp [swapValues]
+  · simp [swapValues, hba]
+
+@[simp] lemma swapValues_away {α : Type uA} {a b x : α}
+    (hxa : x ≠ a) (hxb : x ≠ b) :
+    swapValues a b x = x := by
+  classical
+  simp [swapValues, hxa, hxb]
+
+lemma swapValues_involutive {α : Type uA} (a b : α) :
+    Function.LeftInverse (swapValues a b) (swapValues a b) := by
+  intro x
+  by_cases hxa : x = a
+  · subst x
+    simp
+  · by_cases hxb : x = b
+    · subst x
+      simp
+    · simp [hxa, hxb]
+
+lemma swapValues_surjective {α : Type uA} (a b : α) :
+    Function.Surjective (swapValues a b) :=
+  (swapValues_involutive a b).surjective
+
+/-- Apply one transposition in one coordinate and the identity elsewhere. -/
+noncomputable def singleCoordinateSwap (i : ι) (a b : A i) :
+    UnaryMap A A := by
+  classical
+  intro j
+  by_cases hji : j = i
+  · subst j
+    exact swapValues a b
+  · exact fun x ↦ x
+
+@[simp] lemma singleCoordinateSwap_at (i : ι) (a b : A i) :
+    singleCoordinateSwap i a b i = swapValues a b := by
+  classical
+  simp [singleCoordinateSwap]
+
+@[simp] lemma singleCoordinateSwap_away (i j : ι) (hji : j ≠ i)
+    (a b : A i) :
+    singleCoordinateSwap i a b j = identityUnary (A := A) j := by
+  classical
+  change singleCoordinateSwap i a b j = (fun x ↦ x)
+  simp [singleCoordinateSwap, hji]
+
+/-- Every component of a single-coordinate transposition is surjective. -/
+lemma singleCoordinateSwap_surjective
+    (i : ι) (a b : A i) :
+    ∀ j, Function.Surjective (singleCoordinateSwap i a b j) := by
+  intro j
+  by_cases hji : j = i
+  · subst j
+    simpa using swapValues_surjective a b
+  · rw [singleCoordinateSwap_away i j hji]
+    exact Function.surjective_id
+
+/--
 Synchrony forbids a nontrivial unary permutation which changes only one
 coordinate. The hypotheses are phrased so the lemma can be reused with the
 transpositions constructed in both hard cases of the proof.
@@ -514,6 +631,185 @@ lemma no_nontrivial_single_coordinate_permutation
   have hψid : ψ = identityUnary (A := A) :=
     hsync ψ hψmem (identityUnary (A := A)) hidmem j (haway j hji)
   exact hne (congrFun hψid i)
+
+/--
+A nonconstant distinguished section in the all-box setup produces a unit
+witness. If its alphabet had a third value, a transposition away from `ω`
+would contradict synchrony.
+-/
+lemma unitWitness_of_distinguishedSection_nonconstant
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hperm : IsPermutationFamily Φ)
+    (hsync : IsSynchronous Φ)
+    (hι : HasAtLeastTwo ι)
+    {f : Operation 2 A A}
+    (hsections : ∀ x ∈ P, UnaryIsBox Q (firstSection f x))
+    {ω α : Tuple A}
+    {g : UnaryMap A A}
+    (hg : ChoosesFirstSections f g)
+    (hgω : ∀ i, g i (α i) = ω i)
+    (hgmem : g ∈ Φ)
+    (hnonconstant : ∃ i, ∃ b c,
+      f i (binaryPair (α i) b) ≠ f i (binaryPair (α i) c)) :
+    HasUnitWitness Q := by
+  classical
+  rcases hnonconstant with ⟨i, b, c, hbc⟩
+  obtain ⟨v, e, he, hvω⟩ :
+      ∃ v : A i, ∃ e : A i,
+        f i (binaryPair (α i) e) = v ∧ v ≠ ω i := by
+    by_cases hbω : f i (binaryPair (α i) b) = ω i
+    · refine ⟨f i (binaryPair (α i) c), c, rfl, ?_⟩
+      intro hcω
+      exact hbc (hbω.trans hcω.symm)
+    · exact ⟨f i (binaryPair (α i) b), b, rfl, hbω⟩
+  let g' : UnaryMap A A := modifyUnary g i (α i) v
+  have hg'choose : ChoosesFirstSections f g' :=
+    modifyUnary_choosesFirstSections hg i (α i) v ⟨e, he⟩
+  have hg'poly : IsUnaryPolymorphism P Q g' :=
+    choosingFirstSections_isUnaryPolymorphism hsections hg'choose
+  have hg'notmem : g' ∉ Φ := by
+    intro hg'mem
+    rcases (hperm g hgmem i).2 v with ⟨a, ha⟩
+    have haα : a ≠ α i := by
+      intro haeq
+      subst a
+      exact hvω ((hgω i).symm.trans ha).symm
+    have hsame : g' i a = g' i (α i) := by
+      change modifyUnary g i (α i) v i a =
+        modifyUnary g i (α i) v i (α i)
+      rw [modifyUnary_at_ne _ _ _ _ _ haα, modifyUnary_at_eq]
+      exact ha
+    have := (hperm g' hg'mem i).1 hsame
+    exact haα this
+  have hg'box : UnaryIsBox Q g' := by
+    rcases unary_classification hunary hg'poly with hmem | hbox
+    · exact False.elim (hg'notmem hmem)
+    · exact hbox
+  have hallQ : ∀ y : Tuple A, y i ≠ ω i → y ∈ Q := by
+    intro y hyω
+    apply hg'box
+    intro j
+    by_cases hji : j = i
+    · subst j
+      rcases (hperm g hgmem i).2 (y i) with ⟨a, ha⟩
+      have haα : a ≠ α i := by
+        intro haeq
+        subst a
+        exact hyω ((hgω i).symm.trans ha).symm
+      exact ⟨a, by
+        change modifyUnary g i (α i) v i a = y i
+        rw [modifyUnary_at_ne _ _ _ _ _ haα]
+        exact ha⟩
+    · rcases (hperm g hgmem j).2 (y j) with ⟨a, ha⟩
+      exact ⟨a, by
+        change modifyUnary g i (α i) v j a = y j
+        rw [modifyUnary_away _ _ _ hji]
+        exact ha⟩
+  have htwo : HasExactlyTwo (A i) := by
+    by_contra hnotTwo
+    rcases exists_two_away_of_not_exactlyTwo (hA i) (ω i) hnotTwo with
+      ⟨a, b, haω, hbω, hab⟩
+    let ψ : UnaryMap A A := singleCoordinateSwap i a b
+    have hψpoly : IsUnaryPolymorphism P Q ψ := by
+      intro x hx
+      by_cases hxi : x i = ω i
+      · have hψx : (fun j ↦ ψ j (x j)) = x := by
+          funext j
+          by_cases hji : j = i
+          · subst j
+            rw [show ψ i = swapValues a b by simp [ψ]]
+            apply swapValues_away
+            · intro hxia
+              exact haω (hxia ▸ hxi)
+            · intro hxib
+              exact hbω (hxib ▸ hxi)
+          · simp [ψ, hji, identityUnary]
+        rw [hψx]
+        exact hPQ hx
+      · apply hallQ
+        rw [show ψ i = swapValues a b by simp [ψ]]
+        by_cases hxia : x i = a
+        · rw [hxia]
+          simpa using hbω
+        · by_cases hxib : x i = b
+          · rw [hxib]
+            simpa using haω
+          · simpa [swapValues_away hxia hxib] using hxi
+    have hψsurj : ∀ j, Function.Surjective (ψ j) :=
+      singleCoordinateSwap_surjective i a b
+    have hψaway : ∀ j, j ≠ i →
+        ψ j = identityUnary (A := A) j := by
+      intro j hji
+      exact singleCoordinateSwap_away i j hji a b
+    have hψne : ψ i ≠ identityUnary (A := A) i := by
+      intro heq
+      have hat := congrFun heq a
+      have hba : b = a := by simpa [ψ, identityUnary] using hat
+      exact hab hba.symm
+    exact no_nontrivial_single_coordinate_permutation
+      hunary hPQ hproper hperm hsync hι hψpoly hψsurj hψaway hψne
+  exact ⟨i, v, htwo, fun y hyv ↦ hallQ y (by simpa [hyv] using hvω)⟩
+
+/--
+The all-box-sections lemma from the proof of Theorem 1.4.
+
+If every first-input section over `P` has unary box type, then the binary
+operation is already box-trivial, unless `Q` has a unit-witness obstruction.
+-/
+lemma allBoxSections
+    [Nonempty ι]
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hfull : HasFullProjections P)
+    (hperm : IsPermutationFamily Φ)
+    (hsync : IsSynchronous Φ)
+    {f : Operation 2 A A} (hf : Preserves P Q f)
+    (hsections : ∀ x ∈ P, UnaryIsBox Q (firstSection f x)) :
+    IsBoxTrivial Q Φ f ∨ HasUnitWitness Q := by
+  classical
+  by_cases hbox : IsBox Q f
+  · exact Or.inl (Or.inr hbox)
+  have hι : HasAtLeastTwo ι :=
+    index_hasAtLeastTwo hPQ hproper hfull
+  rcases allBoxSections_setup hA hunary hsync hι hsections hbox with
+    ⟨ω, hωQ, α, g, hg, hgω, hgmem, hconstantAway⟩
+  by_cases hconstantAt : ∀ i b c,
+      f i (binaryPair (α i) b) = f i (binaryPair (α i) c)
+  · let i₀ : ι := Classical.choice inferInstance
+    let a : A i₀ := Classical.choose (hA i₀)
+    rcases hfull i₀ a with ⟨x, hx, _⟩
+    have hωsection : ∀ i, ∃ b,
+        f i (binaryPair (α i) b) = ω i := by
+      intro i
+      rcases hg i (α i) with ⟨b, hb⟩
+      exact ⟨b, hb.trans (hgω i)⟩
+    have hconstant : ∀ i a b c,
+        f i (binaryPair a b) = f i (binaryPair a c) := by
+      intro i a b c
+      by_cases ha : a = α i
+      · subst a
+        exact hconstantAt i b c
+      · exact hconstantAway i a ha b c
+    exact Or.inl (Or.inl
+      (dictator_of_firstSections_constant
+        hunary hf hx hωQ hωsection hconstant))
+  · have hnonconstant : ∃ i, ∃ b c,
+        f i (binaryPair (α i) b) ≠
+          f i (binaryPair (α i) c) := by
+      by_contra hnone
+      apply hconstantAt
+      intro i b c
+      by_contra hne
+      exact hnone ⟨i, b, c, hne⟩
+    exact Or.inr
+      (unitWitness_of_distinguishedSection_nonconstant
+        hA hunary hPQ hproper hperm hsync hι hsections
+        hg hgω hgmem hnonconstant)
 
 /-- A choice of the complement operation on a two-element type. -/
 structure Complementation (α : Type uA) where
