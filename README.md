@@ -20,13 +20,8 @@ All declarations below are in the `BoxTriviality` namespace.
 | Theorem 1.3 | Reduction of box-triviality to binary arity | `boxTrivialAtAllArities_iff_binary` | [`ReductionToBinary.lean`](BoxTriviality/ReductionToBinary.lean) |
 | Corollary 3.3 | Reduction of certificate-triviality to binary arity | `certificateTrivialAtAllArities_iff_binary` | [`ReductionToBinary.lean`](BoxTriviality/ReductionToBinary.lean) |
 | Theorem 1.4 | Reduction of box-triviality to unary arity, subject to the absence of the two obstructions | `boxTrivialAtAllArities_iff_unary_no_obstructions` | [`ReductionToUnary.lean`](BoxTriviality/ReductionToUnary.lean) |
-| First example | The relation and diagonal identity family | `BoxNotCertificate.relation`, `BoxNotCertificate.identityFamily` | [`Examples.lean`](BoxTriviality/Examples.lean) |
-| First example | Box-triviality in every positive arity | `BoxNotCertificate.boxTrivialAtAllArities` | [`Examples.lean`](BoxTriviality/Examples.lean) |
-| First example | Failure of certificate-triviality in unary arity | `BoxNotCertificate.nonCertificateOperation`, `BoxNotCertificate.nonCertificateOperation_preserves`, `BoxNotCertificate.nonCertificateOperation_isBox`, `BoxNotCertificate.not_certificateTrivialAtOne` | [`Examples.lean`](BoxTriviality/Examples.lean) |
-| Remark example | The input relation, output relation, and injection family | `DifferentAlphabetsCounterexample.inputRelation`, `DifferentAlphabetsCounterexample.outputRelation`, `DifferentAlphabetsCounterexample.injectionFamily` | [`Examples.lean`](BoxTriviality/Examples.lean) |
-| Remark example | The natural injective homomorphism | `DifferentAlphabetsCounterexample.diagonalInclusion`, `DifferentAlphabetsCounterexample.diagonalInclusion_mem`, `DifferentAlphabetsCounterexample.diagonalInclusion_polymorphism` | [`Examples.lean`](BoxTriviality/Examples.lean) |
-| Remark example | Unary box-triviality | `DifferentAlphabetsCounterexample.boxTrivialAtOne` | [`Examples.lean`](BoxTriviality/Examples.lean) |
-| Remark example | Binary polymorphism witnessing failure of box-triviality | `DifferentAlphabetsCounterexample.binaryOperation`, `DifferentAlphabetsCounterexample.binaryOperation_preserves`, `DifferentAlphabetsCounterexample.binaryOperation_not_boxTrivial`, `DifferentAlphabetsCounterexample.not_boxTrivialAtTwo` | [`Examples.lean`](BoxTriviality/Examples.lean) |
+| First example | Box-triviality in every positive arity, but not certificate-triviality in unary arity | `BoxNotCertificate.boxTrivialAtAllArities`, `BoxNotCertificate.not_certificateTrivialAtOne` | [`Examples.lean`](BoxTriviality/Examples.lean) |
+| Remark example | Box-triviality in unary arity, but not in binary arity | `DifferentAlphabetsCounterexample.boxTrivialAtOne`, `DifferentAlphabetsCounterexample.not_boxTrivialAtTwo` | [`Examples.lean`](BoxTriviality/Examples.lean) |
 
 ## Building
 
