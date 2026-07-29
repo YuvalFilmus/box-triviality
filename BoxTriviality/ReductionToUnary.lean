@@ -2716,6 +2716,149 @@ lemma not_boxTrivialAtTwo_of_unitWitness
       change unitWitnessOperation i b c j x = z j
       rw [unitWitnessOperation_away i j hji]
 
+/-- Eliminate the obstruction alternative in the all-box-sections lemma. -/
+lemma boxTrivial_of_allBoxSections
+    [Nonempty ι]
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hfull : HasFullProjections P)
+    (hperm : IsPermutationFamily Φ)
+    (hsync : IsSynchronous Φ)
+    (hnoUnit : ¬ HasUnitWitness Q)
+    {f : Operation 2 A A} (hf : Preserves P Q f)
+    (hsections : ∀ x ∈ P, UnaryIsBox Q (firstSection f x)) :
+    IsBoxTrivial Q Φ f := by
+  rcases allBoxSections hA hunary hPQ hproper hfull hperm hsync
+      hf hsections with htrivial | hunit
+  · exact htrivial
+  · exact False.elim (hnoUnit hunit)
+
+/-- Eliminate all obstruction alternatives in either mixed-section lemma. -/
+lemma boxTrivial_of_mixedSections
+    [Nonempty ι]
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hfull : HasFullProjections P)
+    (hperm : IsPermutationFamily Φ)
+    (hsync : IsSynchronous Φ)
+    (hnoUnit : ¬ HasUnitWitness Q)
+    (hnoUpset : ¬ HasGeneralizedUpset P Q)
+    {f : Operation 2 A A} (hf : Preserves P Q f)
+    {σ τ : Tuple A}
+    (hσbox : UnaryIsBox Q (firstSection f σ))
+    (hτmem : firstSection f τ ∈ Φ) :
+    IsBoxTrivial Q Φ f := by
+  classical
+  by_cases htwo : ∀ i, HasExactlyTwo (A i)
+  · rcases mixedSections_boolean htwo hunary hPQ hproper hfull
+        hperm hsync hf hσbox hτmem with htrivial | hunit | hupset
+    · exact htrivial
+    · exact False.elim (hnoUnit hunit)
+    · exact False.elim (hnoUpset hupset)
+  · have hnonBoolean : ∃ i, ¬ HasExactlyTwo (A i) := by
+      by_contra hnone
+      apply htwo
+      intro i
+      by_contra hi
+      exact hnone ⟨i, hi⟩
+    rcases mixedSections_nonBoolean hA hunary hPQ hproper hfull
+        hperm hsync hf hσbox hτmem hnonBoolean with hbox | hunit
+    · exact Or.inr hbox
+    · exact False.elim (hnoUnit hunit)
+
+/--
+The hard direction of Theorem 1.4 at arity two: unary box-triviality and the
+absence of both obstructions imply binary box-triviality.
+-/
+theorem boxTrivialAtTwo_of_unary_no_obstructions
+    [Nonempty ι]
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hfull : HasFullProjections P)
+    (hperm : IsPermutationFamily Φ)
+    (hsync : IsSynchronous Φ)
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hnoUnit : ¬ HasUnitWitness Q)
+    (hnoUpset : ¬ HasGeneralizedUpset P Q) :
+    BoxTrivialAtArity P Q Φ 2 := by
+  classical
+  intro f hf
+  by_cases hallFirstBox : ∀ x ∈ P,
+      UnaryIsBox Q (firstSection f x)
+  · exact boxTrivial_of_allBoxSections
+      hA hunary hPQ hproper hfull hperm hsync hnoUnit
+      hf hallFirstBox
+  have hfirstMem : ∃ τ ∈ P, firstSection f τ ∈ Φ := by
+    by_contra hnone
+    apply hallFirstBox
+    intro x hx
+    rcases firstSection_classification hunary hf hx with hmem | hbox
+    · exact False.elim (hnone ⟨x, hx, hmem⟩)
+    · exact hbox
+  rcases hfirstMem with ⟨τ, hτP, hτmem⟩
+  by_cases hallFirstMem : ∀ x ∈ P, firstSection f x ∈ Φ
+  · by_cases hallSecondMem : ∀ x ∈ P, secondSection f x ∈ Φ
+    · exact False.elim (hnoUpset
+        (allDictatorSections hA hunary hPQ hproper hfull
+          hperm hsync hallFirstMem hallSecondMem))
+    · have hsecondBox : ∃ σ ∈ P,
+          UnaryIsBox Q (secondSection f σ) := by
+        by_contra hnone
+        apply hallSecondMem
+        intro x hx
+        rcases secondSection_classification hunary hf hx with hmem | hbox
+        · exact hmem
+        · exact False.elim (hnone ⟨x, hx, hbox⟩)
+      rcases hsecondBox with ⟨σ, hσP, hσbox⟩
+      by_cases hallSecondBox : ∀ x ∈ P,
+          UnaryIsBox Q (secondSection f x)
+      · have htranspose :
+            IsBoxTrivial Q Φ (transposeBinary f) :=
+          boxTrivial_of_allBoxSections
+            hA hunary hPQ hproper hfull hperm hsync hnoUnit
+            (transposeBinary_preserves hf) (by
+              intro x hx
+              rw [firstSection_transposeBinary]
+              exact hallSecondBox x hx)
+        exact (transposeBinary_isBoxTrivial_iff).1 htranspose
+      · have hsecondMem : ∃ ρ ∈ P,
+            secondSection f ρ ∈ Φ := by
+          by_contra hnone
+          apply hallSecondBox
+          intro x hx
+          rcases secondSection_classification hunary hf hx with hmem | hbox
+          · exact False.elim (hnone ⟨x, hx, hmem⟩)
+          · exact hbox
+        rcases hsecondMem with ⟨ρ, hρP, hρmem⟩
+        have htranspose :
+            IsBoxTrivial Q Φ (transposeBinary f) :=
+          boxTrivial_of_mixedSections
+            hA hunary hPQ hproper hfull hperm hsync
+            hnoUnit hnoUpset (transposeBinary_preserves hf)
+            (σ := σ) (τ := ρ) (by
+              rw [firstSection_transposeBinary]
+              exact hσbox) (by
+              rw [firstSection_transposeBinary]
+              exact hρmem)
+        exact (transposeBinary_isBoxTrivial_iff).1 htranspose
+  · have hfirstBox : ∃ σ ∈ P,
+        UnaryIsBox Q (firstSection f σ) := by
+      by_contra hnone
+      apply hallFirstMem
+      intro x hx
+      rcases firstSection_classification hunary hf hx with hmem | hbox
+      · exact hmem
+      · exact False.elim (hnone ⟨x, hx, hbox⟩)
+    rcases hfirstBox with ⟨σ, hσP, hσbox⟩
+    exact boxTrivial_of_mixedSections
+      hA hunary hPQ hproper hfull hperm hsync
+      hnoUnit hnoUpset hf hσbox hτmem
+
 /-- The easy direction of Theorem 1.4. -/
 lemma unary_and_no_obstructions_of_allArities
     [Nonempty ι]
@@ -2731,5 +2874,30 @@ lemma unary_and_no_obstructions_of_allArities
   · intro hupset
     exact not_boxTrivialAtTwo_of_generalizedUpset hPQ hproper hupset
       (hall 2 (Nat.succ_le_succ (Nat.zero_le 1)))
+
+/--
+Theorem 1.4: under full projections, properness, permutation components, and
+synchrony, box-triviality in every positive arity is equivalent to unary
+box-triviality together with the absence of the unit-witness and
+generalized-upset obstructions.
+-/
+theorem boxTrivialAtAllArities_iff_unary_no_obstructions
+    [Nonempty ι]
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hfull : HasFullProjections P)
+    (hperm : IsPermutationFamily Φ)
+    (hsync : IsSynchronous Φ) :
+    BoxTrivialAtAllArities P Q Φ ↔
+      BoxTrivialAtArity P Q Φ 1 ∧
+        ¬ HasUnitWitness Q ∧ ¬ HasGeneralizedUpset P Q := by
+  constructor
+  · exact unary_and_no_obstructions_of_allArities hPQ hproper
+  · rintro ⟨hunary, hnoUnit, hnoUpset⟩
+    apply (boxTrivialAtAllArities_iff_binary hA hfull).2
+    exact boxTrivialAtTwo_of_unary_no_obstructions
+      hA hPQ hproper hfull hperm hsync
+      hunary hnoUnit hnoUpset
 
 end BoxTriviality
