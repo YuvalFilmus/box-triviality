@@ -1502,6 +1502,158 @@ lemma normalized_firstSection_box_of_ne
       ⟨b, by simpa [firstSection] using hb⟩ with ⟨a, ha⟩
     exact ⟨a, by simpa [firstSection] using ha⟩
 
+/--
+The closure property around the distinguished tuple in the mixed-section
+argument.
+-/
+def HasMixedClosure (P Q : Relation A) (y : Tuple A) : Prop :=
+  ∀ z ∈ P, z ≠ y →
+    ∀ w : Tuple A, (∀ i, z i ≠ y i → w i ≠ y i) → w ∈ Q
+
+/-- The modified second-section map used to prove mixed closure. -/
+noncomputable def mixedClosureMap
+    (h : Operation 2 A A) (τ y z : Tuple A) : UnaryMap A A := by
+  classical
+  exact fun i a ↦ if a = τ i then z i else h i (binaryPair a (y i))
+
+/--
+Abstract core of the mixed closure argument. The first section at `τ` is the
+identity, all other `P`-sections are boxes, and the second section at `y` is a
+member of the permutation family.
+-/
+lemma hasMixedClosure_of_section_data
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hperm : IsPermutationFamily Φ)
+    {h : Operation 2 A A} {τ y : Tuple A}
+    (hτid : firstSection h τ = (fun _ a ↦ a))
+    (hymem : secondSection h y ∈ Φ)
+    (hallbox : ∀ x ∈ P, x ≠ τ →
+      UnaryIsBox Q (firstSection h x)) :
+    HasMixedClosure P Q y := by
+  classical
+  intro z hzP hzy
+  let η : UnaryMap A A := mixedClosureMap h τ y z
+  have hηpoly : IsUnaryPolymorphism P Q η := by
+    intro x hxP
+    by_cases hxτ : x = τ
+    · subst x
+      have hout : (fun i ↦ η i (τ i)) = z := by
+        funext i
+        simp [η, mixedClosureMap]
+      rw [hout]
+      exact hPQ hzP
+    · apply hallbox x hxP hxτ
+      intro i
+      by_cases hxi : x i = τ i
+      · refine ⟨z i, ?_⟩
+        change h i (binaryPair (x i) (z i)) = η i (x i)
+        rw [hxi]
+        change firstSection h τ i (z i) =
+          mixedClosureMap h τ y z i (τ i)
+        rw [hτid]
+        simp [mixedClosureMap]
+      · refine ⟨y i, ?_⟩
+        change h i (binaryPair (x i) (y i)) = η i (x i)
+        simp [η, mixedClosureMap, hxi]
+  have hηnotmem : η ∉ Φ := by
+    intro hηmem
+    have hi : ∃ i, z i ≠ y i := by
+      by_contra hnone
+      apply hzy
+      funext i
+      by_contra hne
+      exact hnone ⟨i, hne⟩
+    rcases hi with ⟨i, hziy⟩
+    rcases (hperm (secondSection h y) hymem i).2 (z i) with
+      ⟨a, ha⟩
+    have hτy : h i (binaryPair (τ i) (y i)) = y i := by
+      change firstSection h τ i (y i) = y i
+      rw [hτid]
+    have haτ : a ≠ τ i := by
+      intro haeq
+      subst a
+      exact hziy (ha.symm.trans hτy)
+    have heq : η i a = η i (τ i) := by
+      change mixedClosureMap h τ y z i a =
+        mixedClosureMap h τ y z i (τ i)
+      rw [show mixedClosureMap h τ y z i a =
+          h i (binaryPair a (y i)) by simp [mixedClosureMap, haτ]]
+      rw [show mixedClosureMap h τ y z i (τ i) = z i by
+        simp [mixedClosureMap]]
+      exact ha
+    have := (hperm η hηmem i).1 heq
+    exact haτ this
+  have hηbox : UnaryIsBox Q η := by
+    rcases unary_classification hunary hηpoly with hmem | hbox
+    · exact False.elim (hηnotmem hmem)
+    · exact hbox
+  intro w hw
+  apply hηbox
+  intro i
+  rcases (hperm (secondSection h y) hymem i).2 (w i) with
+    ⟨a, ha⟩
+  by_cases haτ : a = τ i
+  · have hτy : h i (binaryPair (τ i) (y i)) = y i := by
+      change firstSection h τ i (y i) = y i
+      rw [hτid]
+    have hwy : w i = y i := by
+      subst a
+      exact ha.symm.trans hτy
+    have hziy : z i = y i := by
+      by_contra hne
+      exact hw i hne hwy
+    exact ⟨τ i, by simp [η, mixedClosureMap, hziy, hwy]⟩
+  · exact ⟨a, by
+      change mixedClosureMap h τ y z i a = w i
+      simpa [mixedClosureMap, haτ] using ha⟩
+
+/-- The normalized mixed-section data therefore yields the desired closure. -/
+lemma normalized_hasMixedClosure
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hperm : IsPermutationFamily Φ)
+    {f : Operation 2 A A} (hf : Preserves P Q f)
+    {τ y : Tuple A}
+    (hτmem : firstSection f τ ∈ Φ)
+    (hymem : secondSection (normalizeFirstSections f) y ∈ Φ) :
+    HasMixedClosure P Q y := by
+  have hτperm : ∀ i, FirstSectionIsPermutation f i (τ i) := by
+    intro i
+    exact hperm (firstSection f τ) hτmem i
+  apply hasMixedClosure_of_section_data hunary hPQ hperm
+    (normalized_firstSection_eq_identity hτperm) hymem
+  intro x hx hxτ
+  exact normalized_firstSection_box_of_ne
+    hunary hperm hf hτmem hymem hx hxτ
+
+/--
+The full first part of the mixed-section argument: in the non-box case and
+without a unit witness, there is a distinguished `y ∈ P` with mixed closure.
+-/
+lemma exists_mixedClosure_base
+    [Nonempty ι]
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hfull : HasFullProjections P)
+    (hperm : IsPermutationFamily Φ)
+    (hsync : IsSynchronous Φ)
+    {f : Operation 2 A A} (hf : Preserves P Q f)
+    {σ τ : Tuple A}
+    (hσbox : UnaryIsBox Q (firstSection f σ))
+    (hτmem : firstSection f τ ∈ Φ)
+    (hfnotbox : ¬ IsBox Q f)
+    (hnoUnit : ¬ HasUnitWitness Q) :
+    ∃ y ∈ P, HasMixedClosure P Q y := by
+  rcases exists_normalized_secondSection_mem
+      hA hunary hPQ hproper hfull hperm hsync hf
+      hσbox hτmem hfnotbox hnoUnit with
+    ⟨y, hyP, hymem⟩
+  exact ⟨y, hyP,
+    normalized_hasMixedClosure hunary hPQ hperm hf hτmem hymem⟩
+
 /-- A choice of the complement operation on a two-element type. -/
 structure Complementation (α : Type uA) where
   complement : α → α
