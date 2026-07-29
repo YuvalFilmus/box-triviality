@@ -1406,6 +1406,41 @@ lemma allBoxSections
         hg hgω hgmem hnonconstant)
 
 /--
+Any non-box-trivial binary polymorphism has a second section in `Φ`, provided
+there is no unit witness. This is the transposed all-box lemma.
+-/
+lemma exists_secondSection_mem_of_not_boxTrivial
+    [Nonempty ι]
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hfull : HasFullProjections P)
+    (hperm : IsPermutationFamily Φ)
+    (hsync : IsSynchronous Φ)
+    {h : Operation 2 A A} (hh : Preserves P Q h)
+    (hnottrivial : ¬ IsBoxTrivial Q Φ h)
+    (hnoUnit : ¬ HasUnitWitness Q) :
+    ∃ y ∈ P, secondSection h y ∈ Φ := by
+  by_contra hnone
+  have hallSecondBox : ∀ x ∈ P,
+      UnaryIsBox Q (secondSection h x) := by
+    intro x hx
+    rcases secondSection_classification hunary hh hx with hmem | hbox
+    · exact False.elim (hnone ⟨x, hx, hmem⟩)
+    · exact hbox
+  have hallFirstTranspose : ∀ x ∈ P,
+      UnaryIsBox Q (firstSection (transposeBinary h) x) := by
+    intro x hx
+    rw [firstSection_transposeBinary]
+    exact hallSecondBox x hx
+  rcases allBoxSections hA hunary hPQ hproper hfull hperm hsync
+      (transposeBinary_preserves hh) hallFirstTranspose with
+    htrivial | hunit
+  · exact hnottrivial ((transposeBinary_isBoxTrivial_iff).1 htrivial)
+  · exact hnoUnit hunit
+
+/--
 In the mixed non-box case, and in the absence of a unit witness, some second
 section of the normalized operation belongs to `Φ`. This is the distinguished
 tuple `y` used in both remaining branches of the proof.
@@ -1787,6 +1822,497 @@ lemma exists_complementation {α : Type uA}
       rcases hall x with hxp | hxq
       · exact Or.inr (by simpa [complement, ha] using hxp)
       · exact Or.inl (hxq.trans haq.symm)
+
+/-- Any two distinct elements enumerate a two-element type. -/
+lemma eq_or_eq_of_hasExactlyTwo
+    {α : Type uA} (htwo : HasExactlyTwo α)
+    {a b : α} (hab : a ≠ b) (x : α) :
+    x = a ∨ x = b := by
+  rcases htwo with ⟨p, q, hpq, hall⟩
+  rcases hall a with ha | ha
+  · rcases hall b with hb | hb
+    · exact False.elim (hab (ha.trans hb.symm))
+    · rcases hall x with hx | hx
+      · exact Or.inl (hx.trans ha.symm)
+      · exact Or.inr (hx.trans hb.symm)
+  · rcases hall b with hb | hb
+    · rcases hall x with hx | hx
+      · exact Or.inr (hx.trans hb.symm)
+      · exact Or.inl (hx.trans ha.symm)
+    · exact False.elim (hab (ha.trans hb.symm))
+
+/-- An injective self-map of a two-element type is surjective. -/
+lemma surjective_of_injective_exactlyTwo
+    {α : Type uA} (htwo : HasExactlyTwo α)
+    {u : α → α} (hinj : Function.Injective u) :
+    Function.Surjective u := by
+  rcases htwo with ⟨a, b, hab, hall⟩
+  have huab : u a ≠ u b := fun h ↦ hab (hinj h)
+  have hua := eq_or_eq_of_hasExactlyTwo
+    ⟨a, b, hab, hall⟩ (a := a) (b := b) hab (u a)
+  have hub := eq_or_eq_of_hasExactlyTwo
+    ⟨a, b, hab, hall⟩ (a := a) (b := b) hab (u b)
+  intro y
+  rcases hall y with hy | hy
+  · rcases hua with hua | hua
+    · exact ⟨a, hua.trans hy.symm⟩
+    · rcases hub with hub | hub
+      · exact ⟨b, hub.trans hy.symm⟩
+      · exact False.elim (huab (hua.trans hub.symm))
+  · rcases hua with hua | hua
+    · rcases hub with hub | hub
+      · exact False.elim (huab (hua.trans hub.symm))
+      · exact ⟨b, hub.trans hy.symm⟩
+    · exact ⟨a, hua.trans hy.symm⟩
+
+/-- A non-bijective self-map of a two-element type is constant. -/
+lemma constant_of_not_bijective_exactlyTwo
+    {α : Type uA} (htwo : HasExactlyTwo α)
+    {u : α → α} (hnot : ¬ Function.Bijective u) :
+    ∃ c, ∀ x, u x = c := by
+  classical
+  have hninj : ¬ Function.Injective u := by
+    intro hinj
+    exact hnot ⟨hinj, surjective_of_injective_exactlyTwo htwo hinj⟩
+  obtain ⟨a, b, huab, hab⟩ :
+      ∃ a b, u a = u b ∧ a ≠ b := by
+    by_contra hnone
+    apply hninj
+    intro a b hu
+    by_contra hab
+    exact hnone ⟨a, b, hu, hab⟩
+  refine ⟨u a, ?_⟩
+  intro x
+  rcases eq_or_eq_of_hasExactlyTwo htwo hab x with hx | hx
+  · exact congrArg u hx
+  · exact (congrArg u hx).trans huab.symm
+
+/-- Every permutation of a two-element type is an involution. -/
+lemma involutive_of_bijective_exactlyTwo
+    {α : Type uA} (htwo : HasExactlyTwo α)
+    {u : α → α} (hbij : Function.Bijective u) :
+    Function.LeftInverse u u := by
+  intro x
+  by_cases hux : u x = x
+  · exact congrArg u hux |>.trans hux
+  · rcases eq_or_eq_of_hasExactlyTwo htwo (Ne.symm hux) (u (u x)) with h | h
+    · exact h
+    · exact False.elim (hux (hbij.1 h))
+
+/-- Compose each first section of a binary operation with itself. -/
+def squareFirstSections (f : Operation 2 A A) : Operation 2 A A :=
+  fun i input ↦
+    f i (binaryPair (input 0)
+      (f i (binaryPair (input 0) (input 1))))
+
+@[simp] lemma squareFirstSections_pair
+    (f : Operation 2 A A) (i : ι) (a b : A i) :
+    squareFirstSections f i (binaryPair a b) =
+      f i (binaryPair a (f i (binaryPair a b))) := rfl
+
+/--
+On Boolean alphabets, squaring a first section preserves its image.
+-/
+lemma squareFirstSections_image_iff
+    (htwo : ∀ i, HasExactlyTwo (A i))
+    {f : Operation 2 A A} (i : ι) (a value : A i) :
+    (∃ b, squareFirstSections f i (binaryPair a b) = value) ↔
+      ∃ b, f i (binaryPair a b) = value := by
+  let u : A i → A i := fun b ↦ f i (binaryPair a b)
+  by_cases hbij : Function.Bijective u
+  · have hinv := involutive_of_bijective_exactlyTwo (htwo i) hbij
+    constructor
+    · intro _h
+      exact hbij.2 value
+    · intro h
+      rcases h with ⟨b, hb⟩
+      exact ⟨u b, by
+        change u (u (u b)) = value
+        rw [hinv (u b)]
+        exact hb⟩
+  · rcases constant_of_not_bijective_exactlyTwo (htwo i) hbij with
+      ⟨c, hc⟩
+    constructor <;> intro h
+    · rcases h with ⟨b, hb⟩
+      exact ⟨b, by
+        change u (u b) = value at hb
+        rw [hc (u b)] at hb
+        exact (hc b).trans hb⟩
+    · rcases h with ⟨b, hb⟩
+      exact ⟨b, by
+        change u (u b) = value
+        rw [hc (u b)]
+        exact (hc b).symm.trans hb⟩
+
+/-- Squaring a Boolean permutation section produces the identity section. -/
+lemma squared_firstSection_eq_identity
+    (htwo : ∀ i, HasExactlyTwo (A i))
+    {f : Operation 2 A A} {x : Tuple A}
+    (hperm : ∀ i, FirstSectionIsPermutation f i (x i)) :
+    firstSection (squareFirstSections f) x = (fun _ a ↦ a) := by
+  funext i a
+  change f i (binaryPair (x i) (f i (binaryPair (x i) a))) = a
+  exact involutive_of_bijective_exactlyTwo (htwo i) (hperm i) a
+
+/-- Squaring first sections preserves binary polymorphisms on Boolean alphabets. -/
+lemma squareFirstSections_preserves
+    (htwo : ∀ i, HasExactlyTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hperm : IsPermutationFamily Φ)
+    {f : Operation 2 A A} (hf : Preserves P Q f) :
+    Preserves P Q (squareFirstSections f) := by
+  intro rows hrows
+  rcases firstSection_classification hunary hf (hrows 0) with hmem | hbox
+  · have hallperm : ∀ i,
+        FirstSectionIsPermutation f i (rows 0 i) := by
+      intro i
+      exact hperm (firstSection f (rows 0)) hmem i
+    have hout : applyOperation (squareFirstSections f) rows = rows 1 := by
+      funext i
+      change squareFirstSections f i (fun r ↦ rows r i) = rows 1 i
+      rw [← binaryPair_eta (fun r ↦ rows r i)]
+      change f i (binaryPair (rows 0 i)
+        (f i (binaryPair (rows 0 i) (rows 1 i)))) = rows 1 i
+      exact involutive_of_bijective_exactlyTwo
+        (htwo i) (hallperm i) (rows 1 i)
+    rw [hout]
+    exact hPQ (hrows 1)
+  · apply hbox
+    intro i
+    exact ⟨f i (binaryPair (rows 0 i) (rows 1 i)), rfl⟩
+
+/-- Squaring Boolean first sections preserves the full coordinate image box. -/
+lemma squareFirstSections_inImageBox_iff
+    (htwo : ∀ i, HasExactlyTwo (A i))
+    {f : Operation 2 A A} {y : Tuple A} :
+    InImageBox (squareFirstSections f) y ↔ InImageBox f y := by
+  constructor
+  · intro hy i
+    rcases hy i with ⟨input, hinput⟩
+    rw [← binaryPair_eta input] at hinput
+    rcases (squareFirstSections_image_iff htwo
+      i (input 0) (y i)).1 ⟨input 1, hinput⟩ with ⟨b, hb⟩
+    exact ⟨binaryPair (input 0) b, hb⟩
+  · intro hy i
+    rcases hy i with ⟨input, hinput⟩
+    rw [← binaryPair_eta input] at hinput
+    rcases (squareFirstSections_image_iff htwo
+      i (input 0) (y i)).2 ⟨input 1, hinput⟩ with ⟨b, hb⟩
+    exact ⟨binaryPair (input 0) b, hb⟩
+
+/-- Squaring Boolean first sections preserves box type. -/
+lemma squareFirstSections_isBox_iff
+    (htwo : ∀ i, HasExactlyTwo (A i))
+    {f : Operation 2 A A} :
+    IsBox Q (squareFirstSections f) ↔ IsBox Q f := by
+  constructor
+  · intro hbox y hy
+    exact hbox ((squareFirstSections_inImageBox_iff htwo).2 hy)
+  · intro hbox y hy
+    exact hbox ((squareFirstSections_inImageBox_iff htwo).1 hy)
+
+/--
+In the Boolean mixed case, the squared-section operation is neither dictator
+nor box whenever the original operation is not box type.
+-/
+lemma squareFirstSections_not_boxTrivial
+    [Nonempty ι]
+    (htwo : ∀ i, HasExactlyTwo (A i))
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hperm : IsPermutationFamily Φ)
+    {f : Operation 2 A A}
+    {σ τ : Tuple A}
+    (hσbox : UnaryIsBox Q (firstSection f σ))
+    (hτmem : firstSection f τ ∈ Φ)
+    (hfnotbox : ¬ IsBox Q f) :
+    ¬ IsBoxTrivial Q Φ (squareFirstSections f) := by
+  classical
+  have hτperm : ∀ i, FirstSectionIsPermutation f i (τ i) := by
+    intro i
+    exact hperm (firstSection f τ) hτmem i
+  have hτid :
+      firstSection (squareFirstSections f) τ = (fun _ a ↦ a) :=
+    squared_firstSection_eq_identity htwo hτperm
+  rcases exists_not_surjective_of_unaryIsBox hproper hσbox with
+    ⟨i, hinsigma⟩
+  have hσnotbij : ¬ FirstSectionIsPermutation f i (σ i) :=
+    fun h ↦ hinsigma h.2
+  rcases constant_of_not_bijective_exactlyTwo
+      (htwo i) hσnotbij with ⟨c, hc⟩
+  rcases htwo i with ⟨p, q, hpq, hall⟩
+  let d : A i := if c = p then q else p
+  have hdc : d ≠ c := by
+    by_cases hcp : c = p
+    · subst c
+      simpa [d] using hpq.symm
+    · dsimp [d]
+      rw [if_neg hcp]
+      exact Ne.symm hcp
+  have hσd :
+      squareFirstSections f i (binaryPair (σ i) d) = c := by
+    change f i (binaryPair (σ i)
+      (f i (binaryPair (σ i) d))) = c
+    exact hc _
+  have hτd :
+      squareFirstSections f i (binaryPair (τ i) d) = d := by
+    change firstSection (squareFirstSections f) τ i d = d
+    rw [hτid]
+  intro htrivial
+  rcases htrivial with hdict | hbox
+  · rcases hdict with ⟨s, φ, hφmem, hφ⟩
+    have hs : s = 0 ∨ s = 1 := by
+      refine Fin.cases (Or.inl rfl) (fun r ↦ ?_) s
+      have hr : r = 0 := Fin.eq_zero r
+      subst r
+      exact Or.inr rfl
+    rcases hs with hs | hs
+    · subst s
+      let j : ι := Classical.choice inferInstance
+      rcases htwo j with ⟨a, b, hab, hjall⟩
+      let inputA : Fin 2 → A j := binaryPair (τ j) a
+      let inputB : Fin 2 → A j := binaryPair (τ j) b
+      have heq :
+          squareFirstSections f j inputA =
+            squareFirstSections f j inputB := by
+        rw [hφ j inputA, hφ j inputB]
+        rfl
+      have houtA : squareFirstSections f j inputA = a := by
+        change firstSection (squareFirstSections f) τ j a = a
+        rw [hτid]
+      have houtB : squareFirstSections f j inputB = b := by
+        change firstSection (squareFirstSections f) τ j b = b
+        rw [hτid]
+      exact hab (houtA.symm.trans (heq.trans houtB))
+    · subst s
+      let inputτ : Fin 2 → A i := binaryPair (τ i) d
+      let inputσ : Fin 2 → A i := binaryPair (σ i) d
+      have heq :
+          squareFirstSections f i inputτ =
+            squareFirstSections f i inputσ := by
+        rw [hφ i inputτ, hφ i inputσ]
+        rfl
+      have hcd : c = d := hσd.symm.trans (heq.symm.trans hτd)
+      exact hdc hcd.symm
+  · exact hfnotbox ((squareFirstSections_isBox_iff htwo).1 hbox)
+
+/-- The squared Boolean operation therefore has a distinguished second section. -/
+lemma exists_squared_secondSection_mem
+    [Nonempty ι]
+    (htwo : ∀ i, HasExactlyTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hfull : HasFullProjections P)
+    (hperm : IsPermutationFamily Φ)
+    (hsync : IsSynchronous Φ)
+    {f : Operation 2 A A} (hf : Preserves P Q f)
+    {σ τ : Tuple A}
+    (hσbox : UnaryIsBox Q (firstSection f σ))
+    (hτmem : firstSection f τ ∈ Φ)
+    (hfnotbox : ¬ IsBox Q f)
+    (hnoUnit : ¬ HasUnitWitness Q) :
+    ∃ y ∈ P, secondSection (squareFirstSections f) y ∈ Φ := by
+  have hA : ∀ i, HasAtLeastTwo (A i) := by
+    intro i
+    rcases htwo i with ⟨a, b, hab, hall⟩
+    exact ⟨a, b, hab⟩
+  apply exists_secondSection_mem_of_not_boxTrivial
+    hA hunary hPQ hproper hfull hperm hsync
+    (squareFirstSections_preserves htwo hunary hPQ hperm hf)
+    (squareFirstSections_not_boxTrivial
+      htwo hproper hperm hσbox hτmem hfnotbox)
+    hnoUnit
+
+/-- The intermediate closure property in the Boolean mixed branch. -/
+def HasBooleanMixedClosure
+    (P Q : Relation A) (τ y : Tuple A) : Prop :=
+  ∀ z ∈ P, z ≠ τ →
+    ∀ w : Tuple A, (∀ i, z i ≠ τ i → w i ≠ y i) → w ∈ Q
+
+/--
+The distinguished second section of the squared operation yields the
+Boolean-specific closure property.
+-/
+lemma squared_hasBooleanMixedClosure
+    (htwo : ∀ i, HasExactlyTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hperm : IsPermutationFamily Φ)
+    {f : Operation 2 A A} (hf : Preserves P Q f)
+    {τ y : Tuple A}
+    (hτmem : firstSection f τ ∈ Φ)
+    (hymem : secondSection (squareFirstSections f) y ∈ Φ) :
+    HasBooleanMixedClosure P Q τ y := by
+  classical
+  have hτperm : ∀ i, FirstSectionIsPermutation f i (τ i) := by
+    intro i
+    exact hperm (firstSection f τ) hτmem i
+  have hτid :
+      firstSection (squareFirstSections f) τ = (fun _ a ↦ a) :=
+    squared_firstSection_eq_identity htwo hτperm
+  have hpermInput : ∀ i a,
+      FirstSectionIsPermutation f i a → a = τ i := by
+    intro i a ha
+    apply (hperm
+      (secondSection (squareFirstSections f) y) hymem i).1
+    change squareFirstSections f i (binaryPair a (y i)) =
+      squareFirstSections f i (binaryPair (τ i) (y i))
+    have haid := involutive_of_bijective_exactlyTwo (htwo i) ha (y i)
+    have hτiid :=
+      involutive_of_bijective_exactlyTwo (htwo i) (hτperm i) (y i)
+    exact haid.trans hτiid.symm
+  intro z hzP hzτ
+  rcases firstSection_classification hunary hf hzP with hmem | hbox
+  · apply False.elim
+    apply hzτ
+    funext i
+    exact hpermInput i (z i) (hperm (firstSection f z) hmem i)
+  · intro w hw
+    apply hbox
+    intro i
+    by_cases hzi : z i = τ i
+    · change ∃ a, f i (binaryPair (z i) a) = w i
+      rw [hzi]
+      refine ⟨f i (binaryPair (τ i) (w i)), ?_⟩
+      exact involutive_of_bijective_exactlyTwo
+        (htwo i) (hτperm i) (w i)
+    · have hnotbij : ¬ FirstSectionIsPermutation f i (z i) := by
+        intro hbij
+        exact hzi (hpermInput i (z i) hbij)
+      rcases constant_of_not_bijective_exactlyTwo
+          (htwo i) hnotbij with ⟨c, hc⟩
+      have hcy : c ≠ y i := by
+        intro hcy
+        have heq :
+            squareFirstSections f i (binaryPair (z i) (y i)) =
+              squareFirstSections f i (binaryPair (τ i) (y i)) := by
+          have hzout :
+              squareFirstSections f i (binaryPair (z i) (y i)) = c := by
+            change f i (binaryPair (z i)
+              (f i (binaryPair (z i) (y i)))) = c
+            exact hc _
+          have hτout :
+              squareFirstSections f i (binaryPair (τ i) (y i)) = y i := by
+            change firstSection (squareFirstSections f) τ i (y i) = y i
+            rw [hτid]
+          exact hzout.trans (hcy.trans hτout.symm)
+        exact hzi ((hperm
+          (secondSection (squareFirstSections f) y) hymem i).1 heq)
+      have hwy : w i = c := by
+        rcases eq_or_eq_of_hasExactlyTwo
+            (htwo i) hcy (w i) with hwc | hwy
+        · exact hwc
+        · exact False.elim (hw i hzi hwy)
+      refine ⟨c, ?_⟩
+      rw [hwy]
+      exact hc c
+
+/-- The final unary map in the Boolean mixed branch. -/
+noncomputable def booleanMixedMap
+    (τ ybar x : Tuple A) : UnaryMap A A := by
+  classical
+  exact fun i a ↦ if a = τ i then x i else ybar i
+
+/-- Boolean mixed closure implies the generalized-upset obstruction. -/
+lemma generalizedUpset_of_booleanMixedClosure
+    (htwo : ∀ i, HasExactlyTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hperm : IsPermutationFamily Φ)
+    {τ y : Tuple A} (hyP : y ∈ P)
+    (hclosure : HasBooleanMixedClosure P Q τ y) :
+    HasGeneralizedUpset P Q := by
+  classical
+  let c : ∀ i, Complementation (A i) :=
+    fun i ↦ Classical.choice (exists_complementation (htwo i))
+  let ybar : Tuple A := fun i ↦ (c i).complement (y i)
+  let τbar : Tuple A := fun i ↦ (c i).complement (τ i)
+  have hybar : ∀ i, ybar i ≠ y i := by
+    intro i
+    exact (c i).complement_ne (y i)
+  have hτbar : ∀ i, τbar i ≠ τ i := by
+    intro i
+    exact (c i).complement_ne (τ i)
+  refine ⟨htwo, y, hyP, ?_⟩
+  intro x hxQ hxy
+  let η : UnaryMap A A := booleanMixedMap τ ybar x
+  have hηpoly : IsUnaryPolymorphism P Q η := by
+    intro z hzP
+    by_cases hzτ : z = τ
+    · subst z
+      have hout : (fun i ↦ η i (τ i)) = x := by
+        funext i
+        simp [η, booleanMixedMap]
+      rw [hout]
+      exact hxQ
+    · apply hclosure z hzP hzτ
+      intro i hzi
+      change booleanMixedMap τ ybar x i (z i) ≠ y i
+      simp [booleanMixedMap, hzi, hybar i]
+  have hi : ∃ i, x i ≠ y i := by
+    by_contra hnone
+    apply hxy
+    funext i
+    by_contra hne
+    exact hnone ⟨i, hne⟩
+  rcases hi with ⟨i₀, hxi₀⟩
+  have hxi₀bar : x i₀ = ybar i₀ := by
+    rcases (c i₀).eq_or_eq_complement (y i₀) (x i₀) with h | h
+    · exact False.elim (hxi₀ h)
+    · exact h
+  have hηnotmem : η ∉ Φ := by
+    intro hηmem
+    have heq : η i₀ (τ i₀) = η i₀ (τbar i₀) := by
+      simp [η, booleanMixedMap, hτbar i₀, hxi₀bar]
+    have := (hperm η hηmem i₀).1 heq
+    exact hτbar i₀ this.symm
+  have hηbox : UnaryIsBox Q η := by
+    rcases unary_classification hunary hηpoly with hmem | hbox
+    · exact False.elim (hηnotmem hmem)
+    · exact hbox
+  intro z hz
+  apply hηbox
+  intro i
+  rcases hz i with hzx | hzney
+  · exact ⟨τ i, by simp [η, booleanMixedMap, hzx]⟩
+  · have hzbar : z i = ybar i := by
+      rcases (c i).eq_or_eq_complement (y i) (z i) with h | h
+      · exact False.elim (hzney h)
+      · exact h
+    exact ⟨τbar i, by
+      simp [η, booleanMixedMap, hτbar i, hzbar]⟩
+
+/-- The all-Boolean mixed-section lemma from the proof of Theorem 1.4. -/
+lemma mixedSections_boolean
+    [Nonempty ι]
+    (htwo : ∀ i, HasExactlyTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hfull : HasFullProjections P)
+    (hperm : IsPermutationFamily Φ)
+    (hsync : IsSynchronous Φ)
+    {f : Operation 2 A A} (hf : Preserves P Q f)
+    {σ τ : Tuple A}
+    (hσbox : UnaryIsBox Q (firstSection f σ))
+    (hτmem : firstSection f τ ∈ Φ) :
+    IsBoxTrivial Q Φ f ∨ HasUnitWitness Q ∨
+      HasGeneralizedUpset P Q := by
+  classical
+  by_cases htrivial : IsBoxTrivial Q Φ f
+  · exact Or.inl htrivial
+  have hfnotbox : ¬ IsBox Q f := fun hbox ↦ htrivial (Or.inr hbox)
+  by_cases hunit : HasUnitWitness Q
+  · exact Or.inr (Or.inl hunit)
+  rcases exists_squared_secondSection_mem
+      htwo hunary hPQ hproper hfull hperm hsync hf
+      hσbox hτmem hfnotbox hunit with
+    ⟨y, hyP, hymem⟩
+  have hclosure : HasBooleanMixedClosure P Q τ y :=
+    squared_hasBooleanMixedClosure
+      htwo hunary hperm hf hτmem hymem
+  exact Or.inr (Or.inr
+    (generalizedUpset_of_booleanMixedClosure
+      htwo hunary hperm hyP hclosure))
 
 /--
 The Boolean branch of the all-dictator-sections argument. A relation with
