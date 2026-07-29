@@ -188,6 +188,259 @@ lemma secondSection_classification
     secondSection f x ∈ Φ ∨ UnaryIsBox Q (secondSection f x) :=
   unary_classification hunary (secondSection_isUnaryPolymorphism hf hx)
 
+/-- Whether one coordinate section of a binary operation is a permutation. -/
+def FirstSectionIsPermutation (f : Operation 2 A A) (i : ι) (a : A i) : Prop :=
+  Function.Bijective (fun b ↦ f i (binaryPair a b))
+
+/--
+Normalize a binary operation by replacing every permutation-valued first
+section by the identity, while leaving all other sections unchanged.
+-/
+noncomputable def normalizeFirstSections (f : Operation 2 A A) :
+    Operation 2 A A := by
+  classical
+  intro i input
+  exact if FirstSectionIsPermutation f i (input 0)
+    then input 1 else f i input
+
+@[simp] lemma normalizeFirstSections_of_permutation
+    (f : Operation 2 A A) (i : ι) (a b : A i)
+    (hperm : FirstSectionIsPermutation f i a) :
+    normalizeFirstSections f i (binaryPair a b) = b := by
+  classical
+  simp [normalizeFirstSections, hperm]
+
+@[simp] lemma normalizeFirstSections_of_not_permutation
+    (f : Operation 2 A A) (i : ι) (a b : A i)
+    (hperm : ¬ FirstSectionIsPermutation f i a) :
+    normalizeFirstSections f i (binaryPair a b) =
+      f i (binaryPair a b) := by
+  classical
+  simp [normalizeFirstSections, hperm]
+
+/-- A permutation first section becomes the identity under normalization. -/
+lemma normalized_firstSection_eq_identity
+    {f : Operation 2 A A} {x : Tuple A}
+    (hperm : ∀ i, FirstSectionIsPermutation f i (x i)) :
+    firstSection (normalizeFirstSections f) x =
+      (fun _ a ↦ a) := by
+  funext i a
+  simp [firstSection, hperm i]
+
+/--
+For every fixed first input, normalization preserves each coordinate image.
+-/
+lemma normalized_firstSection_image_iff
+    {f : Operation 2 A A} (i : ι) (a value : A i) :
+    (∃ b, normalizeFirstSections f i (binaryPair a b) = value) ↔
+      ∃ b, f i (binaryPair a b) = value := by
+  classical
+  by_cases hperm : FirstSectionIsPermutation f i a
+  · constructor
+    · intro h
+      rcases h with ⟨b, hb⟩
+      have hbvalue : b = value := by
+        simpa [normalizeFirstSections_of_permutation f i a b hperm] using hb
+      rcases hperm.2 value with ⟨c, hc⟩
+      exact ⟨c, hc⟩
+    · intro h
+      exact ⟨value, by
+        simp [normalizeFirstSections_of_permutation f i a value hperm]⟩
+  · simp [normalizeFirstSections_of_not_permutation f i a, hperm]
+
+/--
+The normalized operation has the same full coordinate images as the original
+operation.
+-/
+lemma normalizeFirstSections_inImageBox_iff
+    {f : Operation 2 A A} {y : Tuple A} :
+    InImageBox (normalizeFirstSections f) y ↔ InImageBox f y := by
+  classical
+  constructor
+  · intro hy i
+    rcases hy i with ⟨input, hinput⟩
+    rw [← binaryPair_eta input] at hinput
+    rcases (normalized_firstSection_image_iff i (input 0) (y i)).1
+      ⟨input 1, hinput⟩ with ⟨b, hb⟩
+    exact ⟨binaryPair (input 0) b, hb⟩
+  · intro hy i
+    rcases hy i with ⟨input, hinput⟩
+    rw [← binaryPair_eta input] at hinput
+    rcases (normalized_firstSection_image_iff i (input 0) (y i)).2
+      ⟨input 1, hinput⟩ with ⟨b, hb⟩
+    exact ⟨binaryPair (input 0) b, hb⟩
+
+/-- Normalization preserves box type in both directions. -/
+lemma normalizeFirstSections_isBox_iff
+    {f : Operation 2 A A} :
+    IsBox Q (normalizeFirstSections f) ↔ IsBox Q f := by
+  constructor
+  · intro hbox y hy
+    exact hbox ((normalizeFirstSections_inImageBox_iff).2 hy)
+  · intro hbox y hy
+    exact hbox ((normalizeFirstSections_inImageBox_iff).1 hy)
+
+/--
+Normalization preserves polymorphisms when all unary polymorphisms have the
+`Φ`/box dichotomy and members of `Φ` are coordinatewise permutations.
+-/
+lemma normalizeFirstSections_preserves
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hperm : IsPermutationFamily Φ)
+    {f : Operation 2 A A} (hf : Preserves P Q f) :
+    Preserves P Q (normalizeFirstSections f) := by
+  intro rows hrows
+  rcases firstSection_classification hunary hf (hrows 0) with hmem | hbox
+  · have hallperm : ∀ i,
+        FirstSectionIsPermutation f i (rows 0 i) := by
+      intro i
+      exact hperm (firstSection f (rows 0)) hmem i
+    have hout : applyOperation (normalizeFirstSections f) rows = rows 1 := by
+      funext i
+      change normalizeFirstSections f i (fun r ↦ rows r i) = rows 1 i
+      rw [← binaryPair_eta (fun r ↦ rows r i)]
+      exact normalizeFirstSections_of_permutation
+        f i (rows 0 i) (rows 1 i) (hallperm i)
+    rw [hout]
+    exact hPQ (hrows 1)
+  · apply hbox
+    intro i
+    change ∃ a, firstSection f (rows 0) i a =
+      applyOperation (normalizeFirstSections f) rows i
+    change ∃ a, f i (binaryPair (rows 0 i) a) =
+      normalizeFirstSections f i (fun r ↦ rows r i)
+    rw [← binaryPair_eta (fun r ↦ rows r i)]
+    exact (normalized_firstSection_image_iff
+      i (rows 0 i)
+      (normalizeFirstSections f i
+        (binaryPair (rows 0 i) (rows 1 i)))).1
+      ⟨rows 1 i, rfl⟩
+
+/--
+A unary box map over a proper relation must fail to be surjective in some
+coordinate.
+-/
+lemma exists_not_surjective_of_unaryIsBox
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    {φ : UnaryMap A A} (hbox : UnaryIsBox Q φ) :
+    ∃ i, ¬ Function.Surjective (φ i) := by
+  classical
+  by_contra hnone
+  rcases hproper with ⟨z, hz⟩
+  apply hz
+  apply hbox
+  intro i
+  have hsurj : Function.Surjective (φ i) := by
+    by_contra hnsurj
+    exact hnone ⟨i, hnsurj⟩
+  exact hsurj (z i)
+
+/--
+The normalization setup for a mixed pair of sections. At the `Φ`-section it
+is the identity; at the box section one coordinate visibly depends on the
+first input. Its full coordinate images remain those of the original `f`.
+-/
+lemma mixedNormalization_setup
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hperm : IsPermutationFamily Φ)
+    {f : Operation 2 A A} (hf : Preserves P Q f)
+    {σ τ : Tuple A}
+    (hσbox : UnaryIsBox Q (firstSection f σ))
+    (hτmem : firstSection f τ ∈ Φ) :
+    Preserves P Q (normalizeFirstSections f) ∧
+      firstSection (normalizeFirstSections f) τ = (fun _ a ↦ a) ∧
+      (∃ i κ,
+        normalizeFirstSections f i (binaryPair (τ i) κ) = κ ∧
+        normalizeFirstSections f i (binaryPair (σ i) κ) ≠ κ) ∧
+      (∀ y, InImageBox (normalizeFirstSections f) y ↔ InImageBox f y) := by
+  have hτperm : ∀ i, FirstSectionIsPermutation f i (τ i) := by
+    intro i
+    exact hperm (firstSection f τ) hτmem i
+  have hτid :
+      firstSection (normalizeFirstSections f) τ = (fun _ a ↦ a) :=
+    normalized_firstSection_eq_identity hτperm
+  rcases exists_not_surjective_of_unaryIsBox hproper hσbox with
+    ⟨i, hi⟩
+  obtain ⟨κ, hκ⟩ : ∃ κ : A i,
+      ∀ a, firstSection f σ i a ≠ κ := by
+    by_contra hnone
+    apply hi
+    intro value
+    by_contra hnpreimage
+    exact hnone ⟨value, fun a ha ↦ hnpreimage ⟨a, ha⟩⟩
+  have hσnotperm : ¬ FirstSectionIsPermutation f i (σ i) := by
+    intro hpermσ
+    exact hi hpermσ.2
+  refine ⟨normalizeFirstSections_preserves hunary hPQ hperm hf,
+    hτid, ?_, fun y ↦ normalizeFirstSections_inImageBox_iff⟩
+  refine ⟨i, κ, ?_, ?_⟩
+  · exact normalizeFirstSections_of_permutation
+      f i (τ i) κ (hτperm i)
+  · rw [normalizeFirstSections_of_not_permutation
+      f i (σ i) κ hσnotperm]
+    exact hκ κ
+
+/--
+In the genuinely mixed, non-box case, the normalized operation is not
+`Φ`-box-trivial: the identity section witnesses dependence on the second
+input, while the exceptional box section witnesses dependence on the first.
+-/
+lemma mixedNormalization_not_boxTrivial
+    [Nonempty ι]
+    (hA : ∀ i, HasAtLeastTwo (A i))
+    (hunary : BoxTrivialAtArity P Q Φ 1)
+    (hPQ : P ⊆ Q)
+    (hproper : ∃ z : Tuple A, z ∉ Q)
+    (hperm : IsPermutationFamily Φ)
+    {f : Operation 2 A A} (hf : Preserves P Q f)
+    {σ τ : Tuple A}
+    (hσbox : UnaryIsBox Q (firstSection f σ))
+    (hτmem : firstSection f τ ∈ Φ)
+    (hfnotbox : ¬ IsBox Q f) :
+    ¬ IsBoxTrivial Q Φ (normalizeFirstSections f) := by
+  rcases mixedNormalization_setup
+      hunary hPQ hproper hperm hf hσbox hτmem with
+    ⟨hnormpoly, hτid, ⟨i, κ, hτκ, hσκ⟩, himage⟩
+  intro htrivial
+  rcases htrivial with hdict | hbox
+  · rcases hdict with ⟨s, φ, hφmem, hφ⟩
+    have hs : s = 0 ∨ s = 1 := by
+      refine Fin.cases (Or.inl rfl) (fun q ↦ ?_) s
+      have hq : q = 0 := Fin.eq_zero q
+      subst q
+      exact Or.inr rfl
+    rcases hs with hs | hs
+    · subst s
+      let j : ι := Classical.choice inferInstance
+      rcases hA j with ⟨a, b, hab⟩
+      let inputA : Fin 2 → A j := binaryPair (τ j) a
+      let inputB : Fin 2 → A j := binaryPair (τ j) b
+      have heq :
+          normalizeFirstSections f j inputA =
+            normalizeFirstSections f j inputB := by
+        rw [hφ j inputA, hφ j inputB]
+        rfl
+      have houtA : normalizeFirstSections f j inputA = a := by
+        change firstSection (normalizeFirstSections f) τ j a = a
+        rw [hτid]
+      have houtB : normalizeFirstSections f j inputB = b := by
+        change firstSection (normalizeFirstSections f) τ j b = b
+        rw [hτid]
+      exact hab (houtA.symm.trans (heq.trans houtB))
+    · subst s
+      let inputτ : Fin 2 → A i := binaryPair (τ i) κ
+      let inputσ : Fin 2 → A i := binaryPair (σ i) κ
+      have heq :
+          normalizeFirstSections f i inputτ =
+            normalizeFirstSections f i inputσ := by
+        rw [hφ i inputτ, hφ i inputσ]
+        rfl
+      exact hσκ (heq.symm ▸ hτκ)
+  · exact hfnotbox ((normalizeFirstSections_isBox_iff).1 hbox)
+
 /--
 If all first and second sections belong to a synchronous permutation family,
 then two members of `P` agreeing in one coordinate agree everywhere.
