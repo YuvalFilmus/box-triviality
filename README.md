@@ -26,6 +26,11 @@ box, and certificate types, triviality at one or all positive arities, full
 projections, synchronous permutation families, and the two obstructions from
 Theorem 1.4.
 
+[`BoxTriviality/ReductionToBinary.lean`](BoxTriviality/ReductionToBinary.lean)
+formalizes Theorem 1.3. Its main result is
+`boxTrivialAtAllArities_iff_binary`. The proof works for arbitrary coordinate
+types and arbitrary, possibly infinite, alphabets.
+
 ## Building
 
 ```text
